@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.4.32916.344
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JsonPathLINQ", "JsonPathLINQ\JsonPathLINQ.csproj", "{E48A6D2C-5609-433A-B1F2-20018F36369A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JsonPathLINQ,Tests", "JsonPathLINQ,Tests\JsonPathLINQ,Tests.csproj", "{B4317BB6-F3BA-4176-9389-9BB15406D47E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{E48A6D2C-5609-433A-B1F2-20018F36369A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E48A6D2C-5609-433A-B1F2-20018F36369A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E48A6D2C-5609-433A-B1F2-20018F36369A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E48A6D2C-5609-433A-B1F2-20018F36369A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B4317BB6-F3BA-4176-9389-9BB15406D47E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B4317BB6-F3BA-4176-9389-9BB15406D47E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B4317BB6-F3BA-4176-9389-9BB15406D47E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B4317BB6-F3BA-4176-9389-9BB15406D47E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {F8180129-0E80-4703-988A-1CB31BF227C2}
+	EndGlobalSection
+EndGlobal
