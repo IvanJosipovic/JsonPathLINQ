@@ -1,12 +1,32 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>netstandard2.1</TargetFramework>
-  </PropertyGroup>
+    <PropertyGroup>
+        <TargetFramework>netstandard2.1</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <AnalysisMode>AllEnabledByDefault</AnalysisMode>
+        <PackageId>JsonPathLINQ</PackageId>
+        <Authors>Ivan Josipovic</Authors>
+        <Description>Converts JsonPath to Expressions</Description>
+        <PackageTags>JsonPath Expression</PackageTags>
+        <RepositoryUrl>https://github.com/IvanJosipovic/JsonPathLINQ</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PublishRepositoryUrl>true</PublishRepositoryUrl>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    </PropertyGroup>
 
   <ItemGroup>
-	  <PackageReference Include="JsonPathExpressions" Version="1.1.2" />
-	  <!--<PackageReference Include="ExpressionTreeToString" Version="3.4.71" />-->
+        <PackageReference Include="JsonPathExpressions" Version="1.1.2" />
+        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" PrivateAssets="All"/>
+        <!--<PackageReference Include="ExpressionTreeToString" Version="3.4.71" />-->
   </ItemGroup>
+
+    <ItemGroup>
+        <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
 
 </Project>
