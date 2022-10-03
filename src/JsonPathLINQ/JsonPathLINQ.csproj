@@ -5,7 +5,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="JsonPathExpressions" Version="1.1.2" />
+	  <PackageReference Include="JsonPathExpressions" Version="1.1.2" />
+	  <!--<PackageReference Include="ExpressionTreeToString" Version="3.4.71" />-->
   </ItemGroup>
 
 </Project>
