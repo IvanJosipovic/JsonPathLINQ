@@ -1,7 +1,4 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestPlatform.ObjectModel;
-using System;
-using System.Linq.Expressions;
 
 namespace JsonPathLINQ_Tests
 {
@@ -62,10 +59,6 @@ namespace JsonPathLINQ_Tests
         [MemberData(nameof(GetTests))]
         public void Tests(string jsonPath, object value)
         {
-            //Expression<Func<TestObject, object>> test = x => x.subClassList.Where(y => y.Type == "1");
-            //var one = test.ToString("C#");
-            //var two = test.ToString("Object notation", "C#");
-
             var expression = JsonPathLINQ.JsonPathLINQ.GetExpression<TestObject>(jsonPath);
 
             expression.Compile().Invoke(new TestObject()).Should().Be(value);
