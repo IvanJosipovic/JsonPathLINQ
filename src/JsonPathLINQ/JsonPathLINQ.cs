@@ -1,15 +1,12 @@
 ﻿using JsonPathExpressions;
 using JsonPathExpressions.Elements;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
 
 namespace JsonPathLINQ
 {
     public static class JsonPathLINQ
     {
-        public static Expression<Func<T, object>> GetExpression<T>(string jsonPath)
+        public static Expression<Func<T, object>> GetExpression<T>(string jsonPath, bool addNullChecks = false)
         {
             var jsonPathExpression = new JsonPathExpression(jsonPath).GetNormalized();
 
@@ -26,7 +23,19 @@ namespace JsonPathLINQ
                     case JsonPathElementType.RecursiveDescent:
                         break;
                     case JsonPathElementType.Property:
-                        body = Expression.PropertyOrField(body, ((JsonPathPropertyElement)element).Name);
+
+                        var prop = Expression.PropertyOrField(body, ((JsonPathPropertyElement)element).Name);
+
+                        if (addNullChecks && jsonPathExpression.Elements.Count > 1)
+                        {
+                            var constant = Expression.Constant(prop.Type.IsValueType ? Activator.CreateInstance(prop.Type) : null, prop.Type);
+                            var condition = Expression.Equal(prop, constant);
+                            body = Expression.Condition(condition, constant, prop);
+                        }
+                        else
+                        {
+                            body = prop;
+                        }
                         break;
                     case JsonPathElementType.AnyProperty:
                         break;
@@ -47,6 +56,11 @@ namespace JsonPathLINQ
 
                         var filter = ProcessFilterExpression(param2, ((JsonPathFilterExpressionElement)element).Expression);
 
+                        if (addNullChecks)
+                        {
+                            //filter = CreateNullChecks(filter);
+                        }
+
                         var newFunc = typeof(Func<,>).MakeGenericType(body.Type.GenericTypeArguments[0], typeof(bool));
 
                         var filterFunc = Expression.Lambda(newFunc, filter, param2);
@@ -59,6 +73,7 @@ namespace JsonPathLINQ
             }
 
             Expression conversion = Expression.Convert(body, typeof(object));
+
             return Expression.Lambda<Func<T, object>>(conversion, param);
         }
 
