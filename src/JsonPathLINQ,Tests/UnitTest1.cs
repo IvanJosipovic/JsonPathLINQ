@@ -25,11 +25,14 @@ public class UnitTest1
             new TestObject2() { Type = "3", Status = "Starting", Nested = new TestObject2.TestObject3(){ Name = "Nested3" } },
         };
 
+        public List<TestObject2> nullSubClassList { get; set; }
+
         public class TestObject2
         {
             public string Type { get; set; } = "Type1";
 
             public string Status { get; set; } = "Status1";
+
             public int intValue { get; set; } = 7;
 
             public bool boolValue { get; set; }
@@ -61,12 +64,16 @@ public class UnitTest1
             new object[] { ".subClassList[?(@.Nested.Name==\"Nested3\")].Status", "Starting", false },
 
             new object[] { ".stringValue", "TestString", true },
-            new object[] { ".subClass.intValue", 7, true },
-            new object[] { ".subClass.Type", "Type1", true },
+            new object[] { ".intValue", 7, true },
             new object[] { ".subClass.intValue", 7, true },
             new object[] { ".subClass.boolValue", false, true },
             new object[] { ".subClass.decimalValue", 18.4, true },
             new object[] { ".subClass.doubleValue", 12.23, true },
+            new object[] { ".subClass.Type", "Type1", true },
+            new object[] { ".subClassList[?(@.Type==\"3\")].Status", "Starting", true },
+            new object[] { ".subClassList[?(@.Nested.Name==\"Nested3\")].Status", "Starting", true },
+
+            //new object[] { ".nullSubClassList[?(@.Type==\"3\")].Status", "Starting", true },
         };
     }
 
@@ -77,67 +84,84 @@ public class UnitTest1
         var expression = JsonPathLINQ.JsonPathLINQ.GetExpression<TestObject>(jsonPath, addNullChecks);
 
         var str = expression.ToString("Object notation", "C#");
+        var str2 = expression.ToString("C#");
 
         expression.Compile().Invoke(new TestObject()).Should().Be(value);
     }
 
-    class TestObject1
+    public class NullSortTestObject
     {
-        public string? stringValue { get; set; } = "testVal";
 
-        public int intValue { get; set; }
+        public NestedObject? Nested { get; set; }
 
-        public TestObject? TestObject { get; set; }
+        public class NestedObject
+        {
+            public string String { get; set; }
+
+            public List<CollectionObject> Strings { get; set; }
+
+            public class CollectionObject
+            {
+                public string String { get; set; }
+            }
+        }
     }
 
     //jsonPath: .status.conditions[?(@.type=="Ready")].status
     [Fact]
     public void NullSort()
     {
-        var obj = new TestObject1();
+        var obj = new NullSortTestObject();
 
-        var lst = new List<TestObject1>()
+        var lst = new List<NullSortTestObject>()
         {
-            new TestObject1()
+            new NullSortTestObject()
             {
-                stringValue = null,
-                TestObject = new TestObject()
+                Nested = new ()
                 {
-                    doubleValue = 1
+                    String = "one",
+                    Strings = new ()
+                    {
+                        new (){ String = "coll1" }
+                    }
                 }
             },
-            new TestObject1()
+            new NullSortTestObject()
             {
-                stringValue = "1"
-            },
-            new TestObject1()
-            {
-                stringValue = "2",
-                TestObject = new TestObject()
+                Nested = new ()
                 {
-                    doubleValue = 2
+                    String = "two",
                 }
+            },
+            new NullSortTestObject()
+            {
             },
         };
 
-        Expression<Func<TestObject1, object>> test1 = x => x.TestObject.stringValue;
-        var test1exp = test1.ToString("Object notation", "C#");
+        //Expression<Func<TestObject1, object>> test1 = x => x.TestObject.stringValue;
+        //var test1exp = test1.ToString("Object notation", "C#");
 
-        Expression<Func<TestObject1, object>> test2 = x => x.TestObject == null ? "" : x.TestObject.stringValue;
-        var test2exp = test2.ToString("Object notation", "C#");
-
-
-        Expression<Func<TestObject1, object>> test3 = x => x.TestObject.subClass.Status;
-        var test3exp = test3.ToString("Object notation", "C#");
-        Expression<Func<TestObject1, object>> test4 = x => x.TestObject == null ? "" : x.TestObject.subClass == null ? "" : x.TestObject.subClass.Status;
-        var test4exp = test4.ToString("Object notation", "C#");
+        //Expression<Func<TestObject1, object>> test2 = x => x.TestObject == null ? "" : x.TestObject.stringValue;
+        //var test2exp = test2.ToString("Object notation", "C#");
 
 
-        //var expression = JsonPathLINQ.JsonPathLINQ.GetExpression<TestObject1>(".stringValue", true);
-        //var str = expression.ToString("Object notation", "C#");
+        //Expression<Func<TestObject1, object>> test3 = x => x.TestObject.subClass.Status;
+        //var test3exp = test3.ToString("Object notation", "C#");
+        //Expression<Func<TestObject1, object>> test4 = x => x.TestObject == null ? "" : x.TestObject.subClass == null ? "" : x.TestObject.subClass.Status;
+        //var test4exp = test4.ToString("Object notation", "C#");
 
 
-        var items = lst.AsQueryable().OrderBy(test2).ToList();
+        var expression = JsonPathLINQ.JsonPathLINQ.GetExpression<NullSortTestObject>(".Nested.String", true);
+        var str = expression.ToString("Object notation", "C#");
+
+        var items = lst.AsQueryable().OrderBy(expression).ToList();
         items.Count.Should().Be(3);
+
+
+        var expression2 = JsonPathLINQ.JsonPathLINQ.GetExpression<NullSortTestObject>(".Nested.Strings[?(@.String==\"two\")].String", true);
+        var str2 = expression.ToString("Object notation", "C#");
+
+        var items2 = lst.AsQueryable().OrderBy(expression).ToList();
+        items2.Count.Should().Be(3);
     }
 }

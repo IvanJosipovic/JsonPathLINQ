@@ -26,11 +26,26 @@ namespace JsonPathLINQ
 
                         var prop = Expression.PropertyOrField(body, ((JsonPathPropertyElement)element).Name);
 
-                        if (addNullChecks && jsonPathExpression.Elements.Count > 1)
+                        if (addNullChecks && jsonPathExpression.Elements.Count > 1) //&& jsonPathExpression.Elements.Last() != element
                         {
                             var constant = Expression.Constant(prop.Type.IsValueType ? Activator.CreateInstance(prop.Type) : null, prop.Type);
                             var condition = Expression.Equal(prop, constant);
-                            body = Expression.Condition(condition, constant, prop);
+                            object newInstance = null;
+
+                            if (prop.Type.IsValueType)
+                            {
+                                newInstance = Activator.CreateInstance(prop.Type);
+                            }
+                            else if(prop.Type == typeof(string))
+                            {
+                                newInstance = string.Empty;
+                            }
+                            else
+                            {
+                                newInstance = Activator.CreateInstance(prop.Type);
+                            }
+
+                            body = Expression.Condition(condition, Expression.Constant(newInstance), prop);
                         }
                         else
                         {
