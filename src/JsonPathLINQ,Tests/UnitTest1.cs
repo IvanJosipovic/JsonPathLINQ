@@ -72,7 +72,8 @@ public class UnitTest1
             new object[] { ".subClassList[?(@.Type==\"3\")].Status", "Starting", true },
             new object[] { ".subClassList[?(@.Nested.Name==\"Nested3\")].Status", "Starting", true },
 
-            //new object[] { ".nullSubClassList[?(@.Type==\"3\")].Status", "Starting", true },
+            new object[] { ".nullSubClassList[?(@.Type==\"3\")].Status", "", true },
+            new object[] { ".nullSubClassList[?(@.Nested.Name==\"Nested3\")].Status", "", true },
         };
     }
 
@@ -105,11 +106,6 @@ public class UnitTest1
             new object[] { ".doubleValue", Exp(x => x.doubleValue), true },
             new object[] { ".subClass.Type", Exp(x => (object)(x.subClass == null ? "" : x.subClass.Type == null ? "" : x.subClass.Type)), true },
             new object[] { ".subClass.Nested.Name", Exp(x => (object)(x.subClass == null ? "" : x.subClass.Nested == null ? "" : x.subClass.Nested.Name == null ? "" : x.subClass.Nested.Name)) , true },
-
-            //new object[] { ".subClassList[?(@.Type==\"3\")].Status", "Starting", true },
-            //new object[] { ".subClassList[?(@.Nested.Name==\"Nested3\")].Status", "Starting", true },
-
-            //new object[] { ".nullSubClassList[?(@.Type==\"3\")].Status", "Starting", true },
         };
     }
 
