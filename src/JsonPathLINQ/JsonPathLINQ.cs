@@ -182,13 +182,9 @@ namespace JsonPathLINQ
 
             Expression? newExpression = null;
 
-            var count = GetDepth(expression);
-
-            if (count == 1) return expression;
-
             Expression temp = expression;
 
-            while (temp is MemberExpression || temp is UnaryExpression)
+            while (temp is MemberExpression || temp is UnaryExpression || temp is MethodCallExpression)
             {
                 try
                 {
@@ -202,11 +198,11 @@ namespace JsonPathLINQ
                 }
                 else if(temp is UnaryExpression tempUnary)
                 {
-                    temp = tempUnary;
+                    temp = tempUnary.Operand;
                 }
-                else
+                else if (temp is MethodCallExpression tempMethod)
                 {
-                    break;
+                    temp = tempMethod.Arguments.First();
                 }
             }
 
@@ -240,24 +236,6 @@ namespace JsonPathLINQ
             }
 
             return newExpression;
-        }
-
-        private static int GetDepth(Expression expression)
-        {
-            int count = 0;
-
-            if (expression is UnaryExpression unary)
-            {
-                expression = unary.Operand;
-            }
-
-            while (expression is MemberExpression member)
-            {
-                count++;
-                expression = member.Expression;
-            }
-
-            return count;
         }
 
         public static Expression ElvisOperator(Expression expression, Expression propertyOrField, Type finalType)
