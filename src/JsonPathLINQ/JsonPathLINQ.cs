@@ -2,6 +2,8 @@
 using JsonPathExpressions;
 using JsonPathExpressions.Elements;
 using System.Linq.Expressions;
+using System.Xml.Linq;
+using ZSpitz.Util;
 
 namespace JsonPathLINQ
 {
@@ -15,8 +17,6 @@ namespace JsonPathLINQ
 
             Expression body = param;
 
-            var finalType = GetFinalType<T>(jsonPathExpression);
-
             foreach (var element in jsonPathExpression.Elements)
             {
                 switch (element.Type)
@@ -26,28 +26,7 @@ namespace JsonPathLINQ
                     case JsonPathElementType.RecursiveDescent:
                         break;
                     case JsonPathElementType.Property:
-                        var prop = Expression.PropertyOrField(body, ((JsonPathPropertyElement)element).Name);
-
-                        if (!prop.Type.IsValueType && addNullChecks && jsonPathExpression.Elements.Count > 1) //&& jsonPathExpression.Elements.Last() != element
-                        {
-                            var constant = Expression.Constant(null);
-                            var t1 = constant.ToString("Object notation", "C#");
-
-                            var condition = Expression.Equal(prop, constant);
-                            var t2 = condition.ToString("Object notation", "C#");
-
-                            var newInst = Expression.Constant(GetDefaultValue(finalType));
-                            var t3 = newInst.ToString("Object notation", "C#");
-
-                            var t4 = prop.ToString("Object notation", "C#");
-
-
-                            body = Expression.Condition(condition, newInst, Expression.Convert(prop, typeof(object)));
-                        }
-                        else
-                        {
-                            body = prop;
-                        }
+                        body = Expression.PropertyOrField(body, ((JsonPathPropertyElement)element).Name);
                         break;
                     case JsonPathElementType.AnyProperty:
                         break;
@@ -68,13 +47,18 @@ namespace JsonPathLINQ
 
                         var filter = ProcessFilterExpression(param2, ((JsonPathFilterExpressionElement)element).Expression);
 
-                        var filterFunc = Expression.Lambda(Expression.GetFuncType(new[] { body.Type.GenericTypeArguments[0], typeof(bool) } ), filter, param2);
+                        var filterFunc = Expression.Lambda(Expression.GetFuncType(new[] { body.Type.GenericTypeArguments[0], typeof(bool) }), filter, param2);
 
                         body = Expression.Call(typeof(Enumerable), nameof(Enumerable.FirstOrDefault), new[] { body.Type.GenericTypeArguments[0] }, body, filterFunc);
                         break;
                     default:
                         break;
                 }
+            }
+
+            if (addNullChecks)
+            {
+                body = CreateNullChecks(body);
             }
 
             Expression conversion = Expression.Convert(body, typeof(object));
@@ -183,6 +167,101 @@ namespace JsonPathLINQ
             }
 
             return propExpr;
+        }
+
+        /// <summary>
+        /// Recursively walks up the tree and adds null checks
+        /// </summary>
+        /// <param name="expression"></param>
+        /// <param name="skipFinalMember"></param>
+        /// <returns></returns>
+        public static Expression CreateNullChecks(this Expression expression, bool skipFinalMember = false)
+        {
+            var parents = new Queue<Expression>();
+
+            Expression? newExpression = null;
+
+            if (expression is UnaryExpression unary)
+            {
+                expression = unary.Operand;
+            }
+
+            if (expression is LambdaExpression lambda)
+            {
+                expression = lambda.Body;
+            }
+
+            var count = GetDepth(expression);
+
+            if (count == 1) return expression;
+
+            MemberExpression temp = (MemberExpression)expression;
+
+            while (temp is MemberExpression member)
+            {
+                try
+                {
+                    parents.Enqueue(member);
+                }
+                catch (InvalidOperationException) { }
+
+                temp = member.Expression as MemberExpression;
+            }
+
+            var finalType = parents.First().Type;
+
+
+            Expression? lastExpression;
+
+            while (true)
+            {
+                if (parents.Count == 0)
+                {
+                    break;
+                }
+
+                lastExpression = parents.Dequeue();
+
+                if (lastExpression.Type.IsValueType)
+                {
+                    newExpression = lastExpression;
+                    continue;
+                }
+
+                if (newExpression == null)
+                {
+                    newExpression = ElvisOperator(lastExpression, lastExpression, finalType);
+                }
+                else
+                {
+                    newExpression = ElvisOperator(lastExpression, newExpression, finalType);
+                }
+            }
+
+            return newExpression;
+        }
+
+        private static int GetDepth(Expression expression)
+        {
+            int count = 0;
+
+            while (expression is MemberExpression member)
+            {
+                count++;
+                expression = member.Expression;
+            }
+
+            return count;
+        }
+
+        public static Expression ElvisOperator(Expression expression, Expression propertyOrField, Type finalType)
+        {
+            return Expression.Condition(
+                    Expression.Equal(expression, Expression.Constant(null, expression.Type)),
+                    Expression.Constant(GetDefaultValue(finalType), finalType),
+                    propertyOrField,
+                    finalType
+                   );
         }
     }
 }

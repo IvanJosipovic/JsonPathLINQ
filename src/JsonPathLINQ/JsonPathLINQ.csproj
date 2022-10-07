@@ -22,7 +22,7 @@
   <ItemGroup>
         <PackageReference Include="JsonPathExpressions" Version="1.1.2" />
         <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" PrivateAssets="All"/>
-        <!--<PackageReference Include="ExpressionTreeToString" Version="3.4.71" />-->
+        <PackageReference Include="ExpressionTreeToString" Version="3.4.71" />
   </ItemGroup>
 
     <ItemGroup>
