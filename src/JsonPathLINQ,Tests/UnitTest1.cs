@@ -211,36 +211,24 @@ public class UnitTest1
     {
         return new List<object[]>
         {
-            //new object[] { ".stringValue", Exp(x => x.stringValue), false },
-            //new object[] { ".intValue", Exp(x => x.intValue), false },
-            //new object[] { ".boolValue", Exp(x => x.boolValue), false },
-            //new object[] { ".decimalValue", Exp(x => x.decimalValue), false },
-            //new object[] { ".doubleValue", Exp(x => x.doubleValue), false },
-            //new object[] { ".subClass.Type", Exp(x => x.subClass.Type), false },
-            //new object[] { ".subClassList[?(@.Type==\"3\")].Status", Exp(x => x.subClassList.FirstOrDefault(y => y.Type == "4").Status), false },
-            //new object[] { ".subClassList[?(@.Nested.Name==\"Nested3\")].Status", Exp(x => x.subClassList.FirstOrDefault(y => y.Nested.Name == "Nested3").Status), false },
-
-            //new object[] { Exp2(x => x.stringValue), Exp(x => x.stringValue) },
-            //new object[] { ".intValue", Exp(x => x.intValue) },
-            //new object[] { ".boolValue", Exp(x => x.boolValue) },
-            //new object[] { ".decimalValue", Exp(x => x.decimalValue) },
-            //new object[] { ".doubleValue", Exp(x => x.doubleValue) },
+            new object[] { Exp2(x => x.stringValue), Exp(x => x.stringValue) },
+            new object[] { Exp2(x => x.intValue), Exp(x => x.intValue) },
+            new object[] { Exp2(x => x.boolValue), Exp(x => x.boolValue) },
+            new object[] { Exp2(x => x.decimalValue), Exp(x => x.decimalValue) },
+            new object[] { Exp2(x => x.doubleValue), Exp(x => x.doubleValue) },
             new object[] { Exp2(x => x.subClass.Type), Exp(x => x.subClass == null ? "" : x.subClass.Type == null ? "" : x.subClass.Type) },
             new object[] { Exp2(x => x.subClass.Nested.Name), Exp(x => x.subClass == null ? "" : x.subClass.Nested == null ? "" : x.subClass.Nested.Name == null ? "" : x.subClass.Nested.Name) },
 
-            //new object[] { ".subClassList[?(@.Type==\"3\")].Status", "Starting", true },
-            //new object[] { ".subClassList[?(@.Nested.Name==\"Nested3\")].Status", "Starting", true },
-
-            //new object[] { ".nullSubClassList[?(@.Type==\"3\")].Status", "Starting", true },
+            //new object[] { Exp2(x => x.nullSubClassList.FirstOrDefault(y => y.Type == "3").Status), Exp(x => x.nullSubClassList == null ? "" : x.nullSubClassList.FirstOrDefault(y => y.Type == "3") == null ? "" : x.nullSubClassList.FirstOrDefault(y => y.Type == "3").Status) },
         };
     }
     [Theory]
     [MemberData(nameof(GetNullCheckTests))]
-    public void NullCheckTests(Expression<Func<TestObject, object>> jsonPath, string value)
+    public void NullCheckTests(Expression<Func<TestObject, object>> queryExpression, string value)
     {
-        var expression = JsonPathLINQ.JsonPathLINQ.CreateNullChecks(jsonPath);
+        var expression = JsonPathLINQ.JsonPathLINQ.CreateNullChecks(queryExpression.Body);
 
-        var response = Expression.Lambda<Func<TestObject, object>>(expression, jsonPath.Parameters);
+        var response = Expression.Lambda<Func<TestObject, object>>(expression, queryExpression.Parameters);
 
         response.ToString().Should().Be(value);
     }
