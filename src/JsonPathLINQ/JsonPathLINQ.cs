@@ -79,48 +79,6 @@ namespace JsonPathLINQ
             }
         }
 
-        //public static Type GetFinalType<T>(JsonPathExpression jsonPathExpression)
-        //{
-        //    var param = Expression.Parameter(typeof(T), "x");
-
-        //    Expression body = param;
-
-        //    foreach (var element in jsonPathExpression.Elements)
-        //    {
-        //        switch (element.Type)
-        //        {
-        //            case JsonPathElementType.Root:
-        //                break;
-        //            case JsonPathElementType.RecursiveDescent:
-        //                break;
-        //            case JsonPathElementType.Property:
-        //                body = Expression.PropertyOrField(body, ((JsonPathPropertyElement)element).Name);
-        //                break;
-        //            case JsonPathElementType.AnyProperty:
-        //                break;
-        //            case JsonPathElementType.PropertyList:
-        //                break;
-        //            case JsonPathElementType.ArrayIndex:
-        //                break;
-        //            case JsonPathElementType.AnyArrayIndex:
-        //                break;
-        //            case JsonPathElementType.ArrayIndexList:
-        //                break;
-        //            case JsonPathElementType.ArraySlice:
-        //                break;
-        //            case JsonPathElementType.Expression:
-        //                break;
-        //            case JsonPathElementType.FilterExpression:
-        //                body = Expression.Call(typeof(Enumerable), nameof(Enumerable.FirstOrDefault), new[] { body.Type.GenericTypeArguments[0] }, body);
-        //                break;
-        //            default:
-        //                break;
-        //        }
-        //    }
-
-        //    return body.Type;
-        //}
-
         static private Expression ProcessFilterExpression(ParameterExpression param, string jsonExpression)
         {
             //@.type=="Ready"
@@ -176,7 +134,7 @@ namespace JsonPathLINQ
         /// <param name="expression"></param>
         /// <param name="skipFinalMember"></param>
         /// <returns></returns>
-        public static Expression CreateNullChecks(this Expression expression, bool skipFinalMember = false)
+        public static Expression CreateNullChecks(this Expression expression)
         {
             var parents = new Queue<Expression>();
 
@@ -186,11 +144,7 @@ namespace JsonPathLINQ
 
             while (temp is MemberExpression || temp is UnaryExpression || temp is MethodCallExpression)
             {
-                try
-                {
-                    parents.Enqueue(temp);
-                }
-                catch (InvalidOperationException) { }
+                parents.Enqueue(temp);
 
                 if (temp is MemberExpression tempMember)
                 {
