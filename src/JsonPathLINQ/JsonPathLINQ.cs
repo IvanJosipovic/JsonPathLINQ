@@ -1,4 +1,5 @@
-﻿using JsonPathExpressions;
+﻿using ExpressionTreeToString;
+using JsonPathExpressions;
 using JsonPathExpressions.Elements;
 using System.Linq.Expressions;
 
@@ -14,6 +15,8 @@ namespace JsonPathLINQ
 
             Expression body = param;
 
+            var finalType = GetFinalType<T>(jsonPathExpression);
+
             foreach (var element in jsonPathExpression.Elements)
             {
                 switch (element.Type)
@@ -23,29 +26,23 @@ namespace JsonPathLINQ
                     case JsonPathElementType.RecursiveDescent:
                         break;
                     case JsonPathElementType.Property:
-
                         var prop = Expression.PropertyOrField(body, ((JsonPathPropertyElement)element).Name);
 
-                        if (addNullChecks && jsonPathExpression.Elements.Count > 1) //&& jsonPathExpression.Elements.Last() != element
+                        if (!prop.Type.IsValueType && addNullChecks && jsonPathExpression.Elements.Count > 1) //&& jsonPathExpression.Elements.Last() != element
                         {
-                            var constant = Expression.Constant(prop.Type.IsValueType ? Activator.CreateInstance(prop.Type) : null, prop.Type);
+                            var constant = Expression.Constant(null);
+                            var t1 = constant.ToString("Object notation", "C#");
+
                             var condition = Expression.Equal(prop, constant);
-                            object newInstance = null;
+                            var t2 = condition.ToString("Object notation", "C#");
 
-                            if (prop.Type.IsValueType)
-                            {
-                                newInstance = Activator.CreateInstance(prop.Type);
-                            }
-                            else if(prop.Type == typeof(string))
-                            {
-                                newInstance = string.Empty;
-                            }
-                            else
-                            {
-                                newInstance = Activator.CreateInstance(prop.Type);
-                            }
+                            var newInst = Expression.Constant(GetDefaultValue(finalType));
+                            var t3 = newInst.ToString("Object notation", "C#");
 
-                            body = Expression.Condition(condition, Expression.Constant(newInstance), prop);
+                            var t4 = prop.ToString("Object notation", "C#");
+
+
+                            body = Expression.Condition(condition, newInst, Expression.Convert(prop, typeof(object)));
                         }
                         else
                         {
@@ -71,14 +68,7 @@ namespace JsonPathLINQ
 
                         var filter = ProcessFilterExpression(param2, ((JsonPathFilterExpressionElement)element).Expression);
 
-                        if (addNullChecks)
-                        {
-                            //filter = CreateNullChecks(filter);
-                        }
-
-                        var newFunc = typeof(Func<,>).MakeGenericType(body.Type.GenericTypeArguments[0], typeof(bool));
-
-                        var filterFunc = Expression.Lambda(newFunc, filter, param2);
+                        var filterFunc = Expression.Lambda(Expression.GetFuncType(new[] { body.Type.GenericTypeArguments[0], typeof(bool) } ), filter, param2);
 
                         body = Expression.Call(typeof(Enumerable), nameof(Enumerable.FirstOrDefault), new[] { body.Type.GenericTypeArguments[0] }, body, filterFunc);
                         break;
@@ -90,6 +80,60 @@ namespace JsonPathLINQ
             Expression conversion = Expression.Convert(body, typeof(object));
 
             return Expression.Lambda<Func<T, object>>(conversion, param);
+        }
+
+        public static object GetDefaultValue(Type type)
+        {
+            if (type == typeof(string))
+            {
+                return string.Empty;
+            }
+            else
+            {
+                return Activator.CreateInstance(type);
+            }
+        }
+
+        public static Type GetFinalType<T>(JsonPathExpression jsonPathExpression)
+        {
+            var param = Expression.Parameter(typeof(T), "x");
+
+            Expression body = param;
+
+            foreach (var element in jsonPathExpression.Elements)
+            {
+                switch (element.Type)
+                {
+                    case JsonPathElementType.Root:
+                        break;
+                    case JsonPathElementType.RecursiveDescent:
+                        break;
+                    case JsonPathElementType.Property:
+                        body = Expression.PropertyOrField(body, ((JsonPathPropertyElement)element).Name);
+                        break;
+                    case JsonPathElementType.AnyProperty:
+                        break;
+                    case JsonPathElementType.PropertyList:
+                        break;
+                    case JsonPathElementType.ArrayIndex:
+                        break;
+                    case JsonPathElementType.AnyArrayIndex:
+                        break;
+                    case JsonPathElementType.ArrayIndexList:
+                        break;
+                    case JsonPathElementType.ArraySlice:
+                        break;
+                    case JsonPathElementType.Expression:
+                        break;
+                    case JsonPathElementType.FilterExpression:
+                        body = Expression.Call(typeof(Enumerable), nameof(Enumerable.FirstOrDefault), new[] { body.Type.GenericTypeArguments[0] }, body);
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            return body.Type;
         }
 
         static private Expression ProcessFilterExpression(ParameterExpression param, string jsonExpression)

@@ -29,7 +29,7 @@ public class UnitTest1
 
         public class TestObject2
         {
-            public string Type { get; set; } = "Type1";
+            public string? Type { get; set; } = "Type1";
 
             public string Status { get; set; } = "Status1";
 
@@ -50,7 +50,7 @@ public class UnitTest1
         }
     }
 
-    public static IEnumerable<object[]> GetTests()
+    public static IEnumerable<object[]> GetValueTests()
     {
         return new List<object[]>
         {
@@ -78,8 +78,8 @@ public class UnitTest1
     }
 
     [Theory]
-    [MemberData(nameof(GetTests))]
-    public void Tests(string jsonPath, object value, bool addNullChecks)
+    [MemberData(nameof(GetValueTests))]
+    public void ValueTests(string jsonPath, object value, bool addNullChecks)
     {
         var expression = JsonPathLINQ.JsonPathLINQ.GetExpression<TestObject>(jsonPath, addNullChecks);
 
@@ -89,9 +89,48 @@ public class UnitTest1
         expression.Compile().Invoke(new TestObject()).Should().Be(value);
     }
 
+    public static IEnumerable<object[]> GetExpressionTests()
+    {
+        return new List<object[]>
+        {
+            new object[] { ".stringValue", "(TestObject x) => x.stringValue", false },
+            new object[] { ".intValue", "(TestObject x) => x.intValue", false },
+            new object[] { ".boolValue", "(TestObject x) => x.boolValue", false },
+            new object[] { ".decimalValue", "(TestObject x) => x.decimalValue", false },
+            new object[] { ".doubleValue", "(TestObject x) => x.doubleValue", false },
+            new object[] { ".subClass.Type", "(TestObject x) => x.subClass.Type", false },
+            new object[] { ".subClassList[?(@.Type==\"3\")].Status", "(TestObject x) => x.subClassList.FirstOrDefault((TestObject2 y) => y.Type == \"3\").Status", false },
+            new object[] { ".subClassList[?(@.Nested.Name==\"Nested3\")].Status", "(TestObject x) => x.subClassList.FirstOrDefault((TestObject2 y) => y.Nested.Name == \"Nested3\").Status", false },
+
+            new object[] { ".stringValue", "(TestObject x) => x.stringValue", true },
+            new object[] { ".intValue", "(TestObject x) => x.intValue", true },
+            new object[] { ".boolValue", "(TestObject x) => x.boolValue", true },
+            new object[] { ".decimalValue", "(TestObject x) => x.decimalValue", true },
+            new object[] { ".doubleValue", "(TestObject x) => x.doubleValue", true },
+            new object[] { ".subClass.Type", "(TestObject x) => ((x.subClass == null ? \"\" : x.subClass).Type == null ? \"\" : x.subClass.Type)", true },
+            //new object[] { ".subClassList[?(@.Type==\"3\")].Status", "Starting", true },
+            //new object[] { ".subClassList[?(@.Nested.Name==\"Nested3\")].Status", "Starting", true },
+
+            //new object[] { ".nullSubClassList[?(@.Type==\"3\")].Status", "Starting", true },
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(GetExpressionTests))]
+    public void ExpressionTests(string jsonPath, string value, bool addNullChecks)
+    {
+        var expression = JsonPathLINQ.JsonPathLINQ.GetExpression<TestObject>(jsonPath, addNullChecks);
+
+        //Expression<Func<TestObject, object>> test = x => x.subClass.Type;
+        //Expression<Func<TestObject, object>> test2 = x => x.subClass == null ? "" : x.subClass.Type;
+
+        //Expression<Func<TestObject, object>> test3 = x => x.subClass == null ? 0 : x.subClass.decimalValue;
+
+        expression.ToString("C#").Should().Be(value);
+    }
+
     public class NullSortTestObject
     {
-
         public NestedObject? Nested { get; set; }
 
         public class NestedObject
@@ -137,19 +176,6 @@ public class UnitTest1
             {
             },
         };
-
-        //Expression<Func<TestObject1, object>> test1 = x => x.TestObject.stringValue;
-        //var test1exp = test1.ToString("Object notation", "C#");
-
-        //Expression<Func<TestObject1, object>> test2 = x => x.TestObject == null ? "" : x.TestObject.stringValue;
-        //var test2exp = test2.ToString("Object notation", "C#");
-
-
-        //Expression<Func<TestObject1, object>> test3 = x => x.TestObject.subClass.Status;
-        //var test3exp = test3.ToString("Object notation", "C#");
-        //Expression<Func<TestObject1, object>> test4 = x => x.TestObject == null ? "" : x.TestObject.subClass == null ? "" : x.TestObject.subClass.Status;
-        //var test4exp = test4.ToString("Object notation", "C#");
-
 
         var expression = JsonPathLINQ.JsonPathLINQ.GetExpression<NullSortTestObject>(".Nested.String", true);
         var str = expression.ToString("Object notation", "C#");
