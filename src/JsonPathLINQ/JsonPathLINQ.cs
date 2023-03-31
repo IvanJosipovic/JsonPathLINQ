@@ -27,7 +27,7 @@ namespace JsonPathLINQ
                     case JsonPathElementType.RecursiveDescent:
                         break;
                     case JsonPathElementType.Property:
-                        body = Expression.PropertyOrField(body, ((JsonPathPropertyElement)element).Name);
+                        body = PropertyOrFieldOrDictionaryKey(body, ((JsonPathPropertyElement)element).Name);
                         break;
                     case JsonPathElementType.AnyProperty:
                         break;
@@ -200,6 +200,37 @@ namespace JsonPathLINQ
                     propertyOrField,
                     finalType
                    );
+        }
+
+        static private Expression PropertyOrFieldOrDictionaryKey(Expression expression, string name)
+        {
+            // Check if the expression is a dictionary
+            if (expression.Type.IsGenericType &&
+                (expression.Type.GetGenericTypeDefinition() == typeof(IDictionary<,>) ||
+                 expression.Type.GetGenericTypeDefinition() == typeof(Dictionary<,>)))
+            {
+                var keyType = expression.Type.GetGenericArguments()[0];
+                var valueType = expression.Type.GetGenericArguments()[1];
+
+                // Create a constant expression for the key
+                var key = Expression.Constant(name, keyType);
+
+                // Get the "get_Item" method of the dictionary
+                var getItemMethod = expression.Type.GetMethod("get_Item");
+
+                // Call the "get_Item" method with the key constant
+                var call = Expression.Call(expression, getItemMethod, key);
+
+                // Convert the result to the expected type
+                var convert = Expression.Convert(call, typeof(object));
+
+                return convert;
+            }
+            else
+            {
+                // Use the PropertyOrField function
+                return Expression.PropertyOrField(expression, name);
+            }
         }
     }
 }

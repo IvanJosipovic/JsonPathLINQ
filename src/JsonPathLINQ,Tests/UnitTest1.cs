@@ -1,4 +1,6 @@
 
+using System.Collections;
+
 namespace JsonPathLINQ_Tests;
 
 public class UnitTest1
@@ -25,6 +27,18 @@ public class UnitTest1
         };
 
         public List<TestObject2> nullSubClassList { get; set; }
+
+        public IDictionary<string, string> idictionary { get; set; } = new Dictionary<string,string>
+        {
+            { "key", "value" },
+            { "key.key", "value1" }
+        };
+
+        public Dictionary<string, string> dictionary { get; set; } = new Dictionary<string, string>
+        {
+            { "key", "value" },
+            { "key.key", "value1" }
+        };
 
         public class TestObject2
         {
@@ -61,6 +75,8 @@ public class UnitTest1
             new object[] { ".subClass.Type", "Type1", false },
             new object[] { ".subClassList[?(@.Type==\"3\")].Status", "Starting", false },
             new object[] { ".subClassList[?(@.Nested.Name==\"Nested3\")].Status", "Starting", false },
+            new object[] { ".idictionary.key", "value", false },
+            new object[] { ".dictionary.key", "value", false },
 
             new object[] { ".stringValue", "TestString", true },
             new object[] { ".intValue", 7, true },
@@ -98,6 +114,8 @@ public class UnitTest1
             new object[] { ".subClass.Type", Exp(x => (object)(x.subClass.Type)), false },
             new object[] { ".subClassList[?(@.Type==\"3\")].Status", Exp(x => (object)(x.subClassList.FirstOrDefault(y => y.Type == "3").Status)), false },
             new object[] { ".subClassList[?(@.Nested.Name==\"Nested3\")].Status", Exp(x => (object)(x.subClassList.FirstOrDefault(y => y.Nested.Name == "Nested3").Status)), false },
+            new object[] { ".idictionary.key", Exp(x => (object)((object)(x.idictionary["key"]))), false },
+            new object[] { ".dictionary.key", Exp(x => (object)((object)(x.dictionary["key"]))), false },
 
             new object[] { ".stringValue", Exp(x => (object)(x.stringValue == null ? "" : x.stringValue)), true },
             new object[] { ".intValue", Exp(x => x.intValue), true },
@@ -217,6 +235,7 @@ public class UnitTest1
             new object[] { Exp2(x => x.nullSubClassList.FirstOrDefault(y => y.Type == "3").Status), Exp(x => (object)(x.nullSubClassList == null ? "" : x.nullSubClassList.FirstOrDefault(y => y.Type == "3") == null ? "" : x.nullSubClassList.FirstOrDefault(y => y.Type == "3").Status == null ? "" : x.nullSubClassList.FirstOrDefault(y => y.Type == "3").Status)) },
         };
     }
+
     [Theory]
     [MemberData(nameof(GetNullCheckTests))]
     public void NullCheckTests(Expression<Func<TestObject, object>> queryExpression, string value)
