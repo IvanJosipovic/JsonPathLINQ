@@ -31,13 +31,13 @@ public class UnitTest1
         public IDictionary<string, string> idictionary { get; set; } = new Dictionary<string,string>
         {
             { "key", "value" },
-            { "key.key", "value1" }
+            { "crossplane.io/external-name", "value1" }
         };
 
         public Dictionary<string, string> dictionary { get; set; } = new Dictionary<string, string>
         {
             { "key", "value" },
-            { "key.key", "value1" }
+            { "crossplane.io/external-name", "value1" }
         };
 
         public class TestObject2
@@ -77,6 +77,8 @@ public class UnitTest1
             new object[] { ".subClassList[?(@.Nested.Name==\"Nested3\")].Status", "Starting", false },
             new object[] { ".idictionary.key", "value", false },
             new object[] { ".dictionary.key", "value", false },
+            new object[] { ".dictionary.crossplane\\.io/external-name", "value1", false },
+
 
             new object[] { ".stringValue", "TestString", true },
             new object[] { ".intValue", 7, true },

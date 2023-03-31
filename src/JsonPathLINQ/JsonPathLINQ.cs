@@ -12,6 +12,15 @@ namespace JsonPathLINQ
     {
         public static Expression<Func<T, object>> GetExpression<T>(string jsonPath, bool addNullChecks = false)
         {
+            //hack to fix \.
+
+            var newToken = "\\--\\";
+
+            if (jsonPath.Contains("\\."))
+            {
+                jsonPath = jsonPath.Replace("\\.", newToken);
+            }
+
             var jsonPathExpression = new JsonPathExpression(jsonPath).GetNormalized();
 
             var param = Expression.Parameter(typeof(T), "x");
@@ -27,7 +36,14 @@ namespace JsonPathLINQ
                     case JsonPathElementType.RecursiveDescent:
                         break;
                     case JsonPathElementType.Property:
-                        body = PropertyOrFieldOrDictionaryKey(body, ((JsonPathPropertyElement)element).Name);
+                        var propName = (((JsonPathPropertyElement)element).Name);
+
+                        if (propName.Contains(newToken))
+                        {
+                            propName = propName.Replace(newToken, ".");
+                        }
+
+                        body = PropertyOrFieldOrDictionaryKey(body, propName);
                         break;
                     case JsonPathElementType.AnyProperty:
                         break;
