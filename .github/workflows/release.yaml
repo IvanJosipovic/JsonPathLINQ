@@ -10,9 +10,6 @@ on:
     paths-ignore:
     - CHANGELOG.md
 
-env:
-  semantic_version: 19
-
 name: Create Release
 jobs:
   build:
@@ -47,7 +44,6 @@ jobs:
       uses: cycjimmy/semantic-release-action@v2
       id: semantic
       with:
-        semantic_version: ${{ env.semantic_version }}
         dry_run: true
         extra_plugins: |
           @semantic-release/changelog
@@ -66,8 +62,6 @@ jobs:
     - name: Semantic Release
       if: steps.semantic.outputs.new_release_published == 'true'
       uses: cycjimmy/semantic-release-action@v2
-      with:
-        semantic_version: ${{ env.semantic_version }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
