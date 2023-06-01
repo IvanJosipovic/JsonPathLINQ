@@ -16,7 +16,7 @@
       "matchUpdateTypes": ["minor", "patch", "digest"],
       "matchCurrentVersion": "!/^0/",
       "matchPaths": [
-        "src/JsonPathLINQ,Tests/JsonPathLINQ,Tests.csproj"
+        "src/JsonPathLINQ.Tests/JsonPathLINQ.Tests.csproj"
       ]
     }
   ]
