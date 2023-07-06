@@ -99,7 +99,7 @@ public class UnitTest1
     [MemberData(nameof(GetValueTests))]
     public void ValueTests(string jsonPath, object value, bool addNullChecks)
     {
-        var expression = JsonPathLINQ.JsonPathLINQ.GetExpression<TestObject>(jsonPath, addNullChecks);
+        var expression = JsonPathLINQ.GetExpression<TestObject>(jsonPath, addNullChecks);
 
         expression.Compile().Invoke(new TestObject()).Should().Be(value);
     }
@@ -143,7 +143,7 @@ public class UnitTest1
     [MemberData(nameof(GetExpressionTests))]
     public void ExpressionTests(string jsonPath, string value, bool addNullChecks)
     {
-        var expression = JsonPathLINQ.JsonPathLINQ.GetExpression<TestObject>(jsonPath, addNullChecks);
+        var expression = JsonPathLINQ.GetExpression<TestObject>(jsonPath, addNullChecks);
 
         expression.ToString().Should().Be(value);
     }
@@ -195,14 +195,14 @@ public class UnitTest1
             },
         };
 
-        var expression = JsonPathLINQ.JsonPathLINQ.GetExpression<NullSortTestObject>(".Nested.String", true);
+        var expression = JsonPathLINQ.GetExpression<NullSortTestObject>(".Nested.String", true);
         var str = expression.ToString("Object notation", "C#");
 
         var items = lst.AsQueryable().OrderBy(expression).ToList();
         items.Count.Should().Be(3);
 
 
-        var expression2 = JsonPathLINQ.JsonPathLINQ.GetExpression<NullSortTestObject>(".Nested.Strings[?(@.String==\"two\")].String", true);
+        var expression2 = JsonPathLINQ.GetExpression<NullSortTestObject>(".Nested.Strings[?(@.String==\"two\")].String", true);
         var str2 = expression.ToString("Object notation", "C#");
 
         var items2 = lst.AsQueryable().OrderBy(expression).ToList();
@@ -242,7 +242,7 @@ public class UnitTest1
     [MemberData(nameof(GetNullCheckTests))]
     public void NullCheckTests(Expression<Func<TestObject, object>> queryExpression, string value)
     {
-        var expression = JsonPathLINQ.JsonPathLINQ.CreateNullChecks(queryExpression.Body);
+        var expression = JsonPathLINQ.CreateNullChecks(queryExpression.Body);
 
         Expression conversion = Expression.Convert(expression, typeof(object));
 
