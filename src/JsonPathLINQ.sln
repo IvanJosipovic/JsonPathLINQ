@@ -5,7 +5,7 @@ VisualStudioVersion = 17.4.32916.344
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JsonPathLINQ", "JsonPathLINQ\JsonPathLINQ.csproj", "{E48A6D2C-5609-433A-B1F2-20018F36369A}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JsonPathLINQ,Tests", "JsonPathLINQ,Tests\JsonPathLINQ,Tests.csproj", "{B4317BB6-F3BA-4176-9389-9BB15406D47E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JsonPathLINQ.Tests", "JsonPathLINQ.Tests\JsonPathLINQ.Tests.csproj", "{B4317BB6-F3BA-4176-9389-9BB15406D47E}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{3B6B2A47-BB23-4A50-B475-67191B6A533B}"
 	ProjectSection(SolutionItems) = preProject

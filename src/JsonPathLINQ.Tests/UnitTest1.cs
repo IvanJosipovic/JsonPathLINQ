@@ -1,7 +1,7 @@
 
 using System.Collections;
 
-namespace JsonPathLINQ_Tests;
+namespace JsonPathLINQ.Tests;
 
 public class UnitTest1
 {
