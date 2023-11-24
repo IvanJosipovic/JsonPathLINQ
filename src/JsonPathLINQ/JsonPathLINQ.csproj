@@ -21,7 +21,6 @@
 
   <ItemGroup>
         <PackageReference Include="JsonPathExpressions" Version="1.1.2" />
-        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All"/>
         <PackageReference Include="ExpressionTreeToString" Version="3.4.71" />
   </ItemGroup>
 
