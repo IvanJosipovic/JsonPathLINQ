@@ -1,16 +1,17 @@
-﻿using ExpressionTreeToString;
-using JsonPathExpressions;
+﻿using JsonPathExpressions;
 using JsonPathExpressions.Elements;
 using System.Linq.Expressions;
-using System.Xml.Linq;
-using System.Xml.Serialization;
-using ZSpitz.Util;
 
 namespace JsonPathLINQ
 {
     public static class JsonPathLINQ
     {
         public static Expression<Func<T, object>> GetExpression<T>(string jsonPath, bool addNullChecks = false)
+        {
+            return GetExpression<T, object>(jsonPath, addNullChecks);
+        }
+
+        public static Expression<Func<T, T2>> GetExpression<T,T2>(string jsonPath, bool addNullChecks = false)
         {
             //hack to fix \.
 
@@ -43,7 +44,7 @@ namespace JsonPathLINQ
                             propName = propName.Replace(newToken, ".");
                         }
 
-                        body = PropertyOrFieldOrDictionaryKey(body, propName);
+                        body = PropertyOrFieldOrDictionaryKey<T2>(body, propName);
                         break;
                     case JsonPathElementType.AnyProperty:
                         break;
@@ -78,9 +79,9 @@ namespace JsonPathLINQ
                 body = CreateNullChecks(body);
             }
 
-            Expression conversion = Expression.Convert(body, typeof(object));
+            Expression conversion = Expression.Convert(body, typeof(T2));
 
-            return Expression.Lambda<Func<T, object>>(conversion, param);
+            return Expression.Lambda<Func<T, T2>>(conversion, param);
         }
 
         public static object GetDefaultValue(Type type)
@@ -218,7 +219,7 @@ namespace JsonPathLINQ
                    );
         }
 
-        static private Expression PropertyOrFieldOrDictionaryKey(Expression expression, string name)
+        static private Expression PropertyOrFieldOrDictionaryKey<T>(Expression expression, string name)
         {
             // Check if the expression is a dictionary
             if (expression.Type.IsGenericType &&
@@ -238,7 +239,7 @@ namespace JsonPathLINQ
                 var call = Expression.Call(expression, getItemMethod, key);
 
                 // Convert the result to the expected type
-                var convert = Expression.Convert(call, typeof(object));
+                var convert = Expression.Convert(call, typeof(T));
 
                 return convert;
             }
