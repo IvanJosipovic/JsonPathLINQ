@@ -1,10 +1,6 @@
-﻿using ExpressionTreeToString;
-using JsonPathExpressions;
+﻿using JsonPathExpressions;
 using JsonPathExpressions.Elements;
 using System.Linq.Expressions;
-using System.Xml.Linq;
-using System.Xml.Serialization;
-using ZSpitz.Util;
 
 namespace JsonPathLINQ
 {
