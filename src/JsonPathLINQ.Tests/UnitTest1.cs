@@ -116,6 +116,8 @@ public class UnitTest1
             new object[] { ".subClass.Type", Exp(x => (object)(x.subClass.Type)), false },
             new object[] { ".subClassList[?(@.Type==\"3\")].Status", Exp(x => (object)(x.subClassList.FirstOrDefault(y => y.Type == "3").Status)), false },
             new object[] { ".subClassList[?(@.Nested.Name==\"Nested3\")].Status", Exp(x => (object)(x.subClassList.FirstOrDefault(y => y.Nested.Name == "Nested3").Status)), false },
+            new object[] { ".subClassList[?(@.Type=='3')].Status", Exp(x => (object)(x.subClassList.FirstOrDefault(y => y.Type == "3").Status)), false },
+            new object[] { ".subClassList[?(@.Nested.Name=='Nested3')].Status", Exp(x => (object)(x.subClassList.FirstOrDefault(y => y.Nested.Name == "Nested3").Status)), false },
             new object[] { ".idictionary.key", Exp(x => (object)((object)(x.idictionary["key"]))), false },
             new object[] { ".dictionary.key", Exp(x => (object)((object)(x.dictionary["key"]))), false },
 

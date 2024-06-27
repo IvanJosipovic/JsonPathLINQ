@@ -99,6 +99,7 @@ namespace JsonPathLINQ
         static private Expression ProcessFilterExpression(ParameterExpression param, string jsonExpression)
         {
             //@.type=="Ready"
+            //@.type=='Ready'
             //@	the current object/element
             //* wildcard.All objects / elements regardless their names.
             var isWildcard = jsonExpression[..1] == "*";
@@ -122,7 +123,7 @@ namespace JsonPathLINQ
                 if (left.IndexOf(opStr) > -1)
                 {
                     op = opStr;
-                    right = left.Substring(left.IndexOf(opStr) + 2);
+                    right = left.Substring(left.IndexOf(opStr) + 2).Replace('\'', '\"');
                     left = left.Substring(0, left.IndexOf(opStr))[1..];
 
                     return Expression.Equal(param.GetNestedProperty(left), Expression.Constant(right.Trim('"')));
