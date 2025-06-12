@@ -61,13 +61,15 @@ namespace JsonPathLINQ
                     case JsonPathElementType.Expression:
                         break;
                     case JsonPathElementType.FilterExpression:
-                        var param2 = Expression.Parameter(body.Type.GenericTypeArguments[0], "y");
+                        var type = body.Type.IsGenericType ? body.Type.GenericTypeArguments[0] : body.Type.GetElementType();
+
+                        var param2 = Expression.Parameter(type, "y");
 
                         var filter = ProcessFilterExpression(param2, ((JsonPathFilterExpressionElement)element).Expression);
 
-                        var filterFunc = Expression.Lambda(Expression.GetFuncType(new[] { body.Type.GenericTypeArguments[0], typeof(bool) }), filter, param2);
+                        var filterFunc = Expression.Lambda(Expression.GetFuncType([type, typeof(bool)]), filter, param2);
 
-                        body = Expression.Call(typeof(Enumerable), nameof(Enumerable.FirstOrDefault), new[] { body.Type.GenericTypeArguments[0] }, body, filterFunc);
+                        body = Expression.Call(typeof(Enumerable), nameof(Enumerable.FirstOrDefault), [type], body, filterFunc);
                         break;
                     default:
                         break;

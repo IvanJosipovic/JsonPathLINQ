@@ -104,6 +104,35 @@ public class UnitTest1
         expression.Compile().Invoke(new TestObject()).Should().Be(value);
     }
 
+    public static IEnumerable<object[]> GetCollectionValueTests()
+    {
+        return
+        [
+            ["[?(@.stringValue==\"test1\")]", "test1", false],
+        ];
+    }
+
+    [Theory]
+    [MemberData(nameof(GetCollectionValueTests))]
+    public void CollectionValueTests(string jsonPath, object value, bool addNullChecks)
+    {
+        var expression = JsonPathLINQ.GetExpression<TestObject[]>(jsonPath, addNullChecks);
+
+        var items = new List<TestObject>();
+
+        for (int i = 0; i < 10; i++)
+        {
+            items.Add(new TestObject()
+            {
+                stringValue = "test" + i
+            });
+        }
+
+        var resp = expression.Compile().Invoke([.. items]);
+
+        ((TestObject)resp).stringValue.Should().Be((string)value);
+    }
+
     public static IEnumerable<object[]> GetExpressionTests()
     {
         return new List<object[]>
