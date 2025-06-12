@@ -109,6 +109,7 @@ public class UnitTest1
         return
         [
             ["[?(@.stringValue==\"test1\")]", "test1", false],
+            ["[?(@.stringValue=='test1')]", "test1", false],
         ];
     }
 
