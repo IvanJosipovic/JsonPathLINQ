@@ -1,6 +1,6 @@
-﻿using JsonPathExpressions;
-using JsonPathExpressions.Elements;
+﻿using Json.Path;
 using System.Linq.Expressions;
+using System.Text;
 
 namespace JsonPathLINQ
 {
@@ -13,66 +13,51 @@ namespace JsonPathLINQ
 
         public static Expression<Func<T, T2>> GetExpression<T,T2>(string jsonPath, bool addNullChecks = false)
         {
-            //hack to fix \.
+            var sanitizedJsonPath = NormalizeJsonPath(jsonPath);
 
-            var newToken = "\\--\\";
-
-            if (jsonPath.Contains("\\."))
+            var jsonPathExpression = JsonPath.Parse(sanitizedJsonPath, new PathParsingOptions
             {
-                jsonPath = jsonPath.Replace("\\.", newToken);
-            }
-
-            var jsonPathExpression = new JsonPathExpression(jsonPath).GetNormalized();
+                AllowRelativePathStart = true,
+                AllowJsonConstructs = true,
+                TolerateExtraWhitespace = true
+            });
 
             var param = Expression.Parameter(typeof(T), "x");
 
             Expression body = param;
 
-            foreach (var element in jsonPathExpression.Elements)
+            foreach (var segment in jsonPathExpression.Segments)
             {
-                switch (element.Type)
+                if (segment.IsRecursive)
                 {
-                    case JsonPathElementType.Root:
-                        break;
-                    case JsonPathElementType.RecursiveDescent:
-                        break;
-                    case JsonPathElementType.Property:
-                        var propName = (((JsonPathPropertyElement)element).Name);
+                    continue;
+                }
 
-                        if (propName.Contains(newToken))
-                        {
-                            propName = propName.Replace(newToken, ".");
-                        }
+                foreach (var selector in segment.Selectors)
+                {
+                    switch (selector)
+                    {
+                        case NameSelector nameSelector:
+                            var propName = RestoreEscapedCharacters(nameSelector.Name);
 
-                        body = PropertyOrFieldOrDictionaryKey<T2>(body, propName);
-                        break;
-                    case JsonPathElementType.AnyProperty:
-                        break;
-                    case JsonPathElementType.PropertyList:
-                        break;
-                    case JsonPathElementType.ArrayIndex:
-                        break;
-                    case JsonPathElementType.AnyArrayIndex:
-                        break;
-                    case JsonPathElementType.ArrayIndexList:
-                        break;
-                    case JsonPathElementType.ArraySlice:
-                        break;
-                    case JsonPathElementType.Expression:
-                        break;
-                    case JsonPathElementType.FilterExpression:
-                        var type = body.Type.IsGenericType ? body.Type.GenericTypeArguments[0] : body.Type.GetElementType();
+                            body = PropertyOrFieldOrDictionaryKey<T2>(body, propName);
+                            break;
+                        case FilterSelector filterSelector:
+                            var type = body.Type.IsGenericType ? body.Type.GenericTypeArguments[0] : body.Type.GetElementType();
 
-                        var param2 = Expression.Parameter(type, "y");
+                            var param2 = Expression.Parameter(type, "y");
 
-                        var filter = ProcessFilterExpression(param2, ((JsonPathFilterExpressionElement)element).Expression);
+                            var filterExpression = GetFilterExpression(filterSelector.Expression);
 
-                        var filterFunc = Expression.Lambda(Expression.GetFuncType([type, typeof(bool)]), filter, param2);
+                            var filter = ProcessFilterExpression(param2, RestoreEscapedCharacters(filterExpression));
 
-                        body = Expression.Call(typeof(Enumerable), nameof(Enumerable.FirstOrDefault), [type], body, filterFunc);
-                        break;
-                    default:
-                        break;
+                            var filterFunc = Expression.Lambda(Expression.GetFuncType([type, typeof(bool)]), filter, param2);
+
+                            body = Expression.Call(typeof(Enumerable), nameof(Enumerable.FirstOrDefault), [type], body, filterFunc);
+                            break;
+                        default:
+                            break;
+                    }
                 }
             }
 
@@ -86,6 +71,7 @@ namespace JsonPathLINQ
             return Expression.Lambda<Func<T, T2>>(conversion, param);
         }
 
+
         public static object GetDefaultValue(Type type)
         {
             if (type == typeof(string))
@@ -96,6 +82,94 @@ namespace JsonPathLINQ
             {
                 return Activator.CreateInstance(type);
             }
+        }
+
+        private static string GetFilterExpression(IFilterExpression expression)
+        {
+            var builder = new StringBuilder();
+            expression.BuildString(builder);
+
+            return builder.ToString();
+        }
+
+        private const string EscapedDotToken = "";
+
+        private static string NormalizeJsonPath(string jsonPath)
+        {
+            var normalized = jsonPath.Replace(@"\.", EscapedDotToken);
+
+            if (!normalized.StartsWith("$") && !normalized.StartsWith("@"))
+            {
+                if (normalized.StartsWith('.') || normalized.StartsWith('['))
+                {
+                    normalized = "$" + normalized;
+                }
+                else
+                {
+                    normalized = "$." + normalized;
+                }
+            }
+
+            normalized = ConvertEscapedSegmentsToBracketNotation(normalized);
+
+            return normalized;
+        }
+        private static string ConvertEscapedSegmentsToBracketNotation(string path)
+        {
+            if (path.IndexOf(EscapedDotToken, StringComparison.Ordinal) < 0)
+            {
+                return path;
+            }
+
+            var builder = new StringBuilder(path.Length);
+
+            for (var i = 0; i < path.Length;)
+            {
+                if (path[i] == '.' && i + 1 < path.Length && path[i + 1] != '.')
+                {
+                    var nextSeparator = FindNextSeparator(path, i + 1);
+                    var segment = path.Substring(i + 1, nextSeparator - (i + 1));
+
+                    if (segment.IndexOf(EscapedDotToken, StringComparison.Ordinal) >= 0)
+                    {
+                        builder.Append("['");
+                        builder.Append(segment.Replace("'", "\'"));
+                        builder.Append("']");
+                        i = nextSeparator;
+                        continue;
+                    }
+                }
+
+                builder.Append(path[i]);
+                i++;
+            }
+
+            return builder.ToString();
+        }
+
+        private static int FindNextSeparator(string path, int startIndex)
+        {
+            var index = startIndex;
+
+            while (index < path.Length)
+            {
+                var character = path[index];
+
+                if (character == '.' || character == '[')
+                {
+                    break;
+                }
+
+                index++;
+            }
+
+            return index;
+        }
+
+
+        private static string RestoreEscapedCharacters(string value)
+        {
+            return value.Replace(EscapedDotToken, ".");
         }
 
         static private Expression ProcessFilterExpression(ParameterExpression param, string jsonExpression)
