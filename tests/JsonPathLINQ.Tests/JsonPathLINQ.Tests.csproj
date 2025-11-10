@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>JsonPathLINQ_Tests</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+	  <PackageReference Include="ExpressionTreeToString" Version="3.4.71" />
+	  <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.0" />
+	  <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.1.0" />
+	  <PackageReference Include="Shouldly" Version="4.3.0" />
+	  <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+	  <PackageReference Include="xunit.v3.mtp-v2" Version="3.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\JsonPathLINQ\JsonPathLINQ.csproj" />
+  </ItemGroup>
+
+</Project>
