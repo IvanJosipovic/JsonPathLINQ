@@ -11,8 +11,116 @@ public record JsonPathTestCase(string Name, string Template, object? Input, stri
 
 public sealed class JsonPathTests
 {
+    [Theory]
+    [MemberData(nameof(TypesInputData))]
+    public void TypesInput(JsonPathTestCase testCase) => RunTest(testCase);
+
+    [Theory]
+    [MemberData(nameof(StructInputData))]
+    public void StructInput(JsonPathTestCase testCase) => RunTest(testCase);
+
+    [Theory]
+    [MemberData(nameof(StructInputAllowMissingData))]
+    public void StructInputAllowsMissingKeys(JsonPathTestCase testCase) => RunTest(testCase, allowMissingKeys: true);
+
+    [Theory]
+    [MemberData(nameof(StructInputFailureData))]
+    public void StructInputFailures(JsonPathTestCase testCase) => RunTestExpectFailure(testCase);
+
+    [Theory]
+    [MemberData(nameof(JsonInputData))]
+    public void JsonInput(JsonPathTestCase testCase) => RunTest(testCase);
+
+    [Theory]
+    [MemberData(nameof(KubernetesSampleData))]
+    public void KubernetesSamples(JsonPathTestCase testCase) => RunTest(testCase);
+
+    [Theory]
+    [MemberData(nameof(KubernetesSampleSortedData))]
+    public void KubernetesSamplesWithSortedOutput(JsonPathTestCase testCase) => RunTestSorted(testCase);
+
+    [Theory]
+    [MemberData(nameof(EmptyRangeData))]
+    public void EmptyRangeIsValid(JsonPathTestCase testCase) => RunTest(testCase);
+
     [Fact]
-    public void TypesInput()
+    public void JsonOutputCanBeEnabled()
+    {
+        var store = new Store
+        {
+            Name = "jsonpath",
+            Book = new List<Book> { new("reference", "Nigel Rees", "Sayings", 8.95f) }
+        };
+
+        var jsonPath = new JsonPath("json-output");
+        jsonPath.Parse("{.Book}");
+        jsonPath.EnableJsonOutput(true);
+        var writer = new StringWriter();
+        jsonPath.Execute(writer, store);
+        var output = writer.ToString();
+        Assert.Equal("[\n  [\n    {\n      \"Category\": \"reference\",\n      \"Author\": \"Nigel Rees\",\n      \"Title\": \"Sayings\",\n      \"Price\": 8.95\n    }\n  ]\n]\n", output);
+    }
+
+    public static TheoryData<JsonPathTestCase> TypesInputData => CreateTypesInputData();
+
+    public static TheoryData<JsonPathTestCase> StructInputData => CreateStructInputData();
+
+    public static TheoryData<JsonPathTestCase> StructInputAllowMissingData => CreateStructInputAllowMissingData();
+
+    public static TheoryData<JsonPathTestCase> StructInputFailureData => CreateStructInputFailureData();
+
+    public static TheoryData<JsonPathTestCase> JsonInputData => CreateJsonInputData();
+
+    public static TheoryData<JsonPathTestCase> KubernetesSampleData => CreateKubernetesSampleData();
+
+    public static TheoryData<JsonPathTestCase> KubernetesSampleSortedData => CreateKubernetesSampleSortedData();
+
+    public static TheoryData<JsonPathTestCase> EmptyRangeData => CreateEmptyRangeData();
+
+    private static void RunTest(JsonPathTestCase testCase, bool allowMissingKeys = false)
+    {
+        var jsonPath = new JsonPath(testCase.Name).AllowMissingKeys(allowMissingKeys);
+        var parseException = Record.Exception(() => jsonPath.Parse(testCase.Template));
+        Assert.Null(parseException);
+
+        var writer = new StringWriter();
+        var executeException = Record.Exception(() => jsonPath.Execute(writer, testCase.Input));
+        Assert.Null(executeException);
+        Assert.Equal(testCase.Expected, writer.ToString());
+    }
+
+    private static void RunTestSorted(JsonPathTestCase testCase)
+    {
+        var jsonPath = new JsonPath(testCase.Name);
+        jsonPath.Parse(testCase.Template);
+        var writer = new StringWriter();
+        jsonPath.Execute(writer, testCase.Input);
+        var output = writer.ToString();
+        var sortedOutput = output.Split(' ', StringSplitOptions.RemoveEmptyEntries).OrderBy(x => x).ToArray();
+        var sortedExpected = testCase.Expected.Split(' ', StringSplitOptions.RemoveEmptyEntries).OrderBy(x => x).ToArray();
+        Assert.Equal(sortedExpected, sortedOutput);
+    }
+
+    private static void RunTestExpectFailure(JsonPathTestCase testCase)
+    {
+        var jsonPath = new JsonPath(testCase.Name);
+        if (testCase.Template is not null)
+        {
+            var parseException = Record.Exception(() => jsonPath.Parse(testCase.Template));
+            if (parseException != null)
+            {
+                Assert.Contains(testCase.Expected, parseException.Message);
+                return;
+            }
+        }
+
+        var writer = new StringWriter();
+        var executeException = Record.Exception(() => jsonPath.Execute(writer, testCase.Input));
+        Assert.True(executeException is not null, $"Expected exception for {testCase.Name}");
+        Assert.Contains(testCase.Expected, executeException!.Message);
+    }
+
+    private static TheoryData<JsonPathTestCase> CreateTypesInputData()
     {
         var types = new Dictionary<string, object?>
         {
@@ -37,136 +145,110 @@ public sealed class JsonPathTests
             },
         };
 
-        var tests = new List<JsonPathTestCase>
-        {
-            new("boolSlice", "{ .bools }", types, "[true,false,true,false]"),
-            new("boolSliceIndex", "{ .bools[0] }", types, "true"),
-            new("boolSliceIndexNegative", "{ .bools[-1] }", types, "false"),
-            new("boolSubSlice", "{ .bools[0:2] }", types, "true false"),
-            new("boolSubSliceFirst", "{ .bools[:2] }", types, "true false"),
-            new("boolSubSliceStep", "{ .bools[:4:2] }", types, "true true"),
-            new("integerSlice", "{ .integers }", types, "[1,2,3,4]"),
-            new("integerSliceIndex", "{ .integers[0] }", types, "1"),
-            new("integerSliceNegative", "{ .integers[-2] }", types, "3"),
-            new("integerSubSlice", "{ .integers[:2] }", types, "1 2"),
-            new("integerSubSliceStep", "{ .integers[:4:2] }", types, "1 3"),
-            new("floatSlice", "{ .floats }", types, "[1,2.2,3.3,4]"),
-            new("floatSliceIndex", "{ .floats[0] }", types, "1"),
-            new("floatSliceNegative", "{ .floats[-2] }", types, "3.3"),
-            new("floatSubSlice", "{ .floats[:2] }", types, "1 2.2"),
-            new("floatSubSliceStep", "{ .floats[:4:2] }", types, "1 3.3"),
-            new("stringSlice", "{ .strings }", types, "[\"one\",\"two\",\"three\",\"four\"]"),
-            new("stringSliceIndex", "{ .strings[0] }", types, "one"),
-            new("stringSliceNegative", "{ .strings[-2] }", types, "three"),
-            new("stringSubSlice", "{ .strings[:2] }", types, "one two"),
-            new("stringSubSliceStep", "{ .strings[:4:2] }", types, "one three"),
-            new("interfaceSlice", "{ .interfaces }", types, "[true,\"one\",1,1.1]"),
-            new("interfaceSliceIndex", "{ .interfaces[0] }", types, "true"),
-            new("interfaceSliceNegative", "{ .interfaces[-2] }", types, "1"),
-            new("interfaceSubSlice", "{ .interfaces[:2] }", types, "true one"),
-            new("interfaceSubSliceStep", "{ .interfaces[:4:2] }", types, "true 1"),
-            new("mapSlice", "{ .maps }", types,
-                "[{\"name\":\"one\",\"value\":1},{\"name\":\"two\",\"value\":2.02},{\"name\":\"three\",\"value\":3.03},{\"name\":\"four\",\"value\":4.04}]")
-        };
-
-        tests.Add(new("mapSliceIndex", "{ .maps[0] }", types, "{\"name\":\"one\",\"value\":1}"));
-        tests.Add(new("mapSliceNegative", "{ .maps[-2] }", types, "{\"name\":\"three\",\"value\":3.03}"));
-        tests.Add(new("mapSubSlice", "{ .maps[:2] }", types, "{\"name\":\"one\",\"value\":1} {\"name\":\"two\",\"value\":2.02}"));
-        tests.Add(new("mapSubSliceStep", "{ .maps[::2] }", types, "{\"name\":\"one\",\"value\":1} {\"name\":\"three\",\"value\":3.03}"));
-        tests.Add(new("structSlice", "{ .structs }", types,
+        var data = new TheoryData<JsonPathTestCase>();
+        data.Add(new JsonPathTestCase("boolSlice", "{ .bools }", types, "[true,false,true,false]"));
+        data.Add(new JsonPathTestCase("boolSliceIndex", "{ .bools[0] }", types, "true"));
+        data.Add(new JsonPathTestCase("boolSliceIndexNegative", "{ .bools[-1] }", types, "false"));
+        data.Add(new JsonPathTestCase("boolSubSlice", "{ .bools[0:2] }", types, "true false"));
+        data.Add(new JsonPathTestCase("boolSubSliceFirst", "{ .bools[:2] }", types, "true false"));
+        data.Add(new JsonPathTestCase("boolSubSliceStep", "{ .bools[:4:2] }", types, "true true"));
+        data.Add(new JsonPathTestCase("integerSlice", "{ .integers }", types, "[1,2,3,4]"));
+        data.Add(new JsonPathTestCase("integerSliceIndex", "{ .integers[0] }", types, "1"));
+        data.Add(new JsonPathTestCase("integerSliceNegative", "{ .integers[-2] }", types, "3"));
+        data.Add(new JsonPathTestCase("integerSubSlice", "{ .integers[:2] }", types, "1 2"));
+        data.Add(new JsonPathTestCase("integerSubSliceStep", "{ .integers[:4:2] }", types, "1 3"));
+        data.Add(new JsonPathTestCase("floatSlice", "{ .floats }", types, "[1,2.2,3.3,4]"));
+        data.Add(new JsonPathTestCase("floatSliceIndex", "{ .floats[0] }", types, "1"));
+        data.Add(new JsonPathTestCase("floatSliceNegative", "{ .floats[-2] }", types, "3.3"));
+        data.Add(new JsonPathTestCase("floatSubSlice", "{ .floats[:2] }", types, "1 2.2"));
+        data.Add(new JsonPathTestCase("floatSubSliceStep", "{ .floats[:4:2] }", types, "1 3.3"));
+        data.Add(new JsonPathTestCase("stringSlice", "{ .strings }", types, "[\"one\",\"two\",\"three\",\"four\"]"));
+        data.Add(new JsonPathTestCase("stringSliceIndex", "{ .strings[0] }", types, "one"));
+        data.Add(new JsonPathTestCase("stringSliceNegative", "{ .strings[-2] }", types, "three"));
+        data.Add(new JsonPathTestCase("stringSubSlice", "{ .strings[:2] }", types, "one two"));
+        data.Add(new JsonPathTestCase("stringSubSliceStep", "{ .strings[:4:2] }", types, "one three"));
+        data.Add(new JsonPathTestCase("interfaceSlice", "{ .interfaces }", types, "[true,\"one\",1,1.1]"));
+        data.Add(new JsonPathTestCase("interfaceSliceIndex", "{ .interfaces[0] }", types, "true"));
+        data.Add(new JsonPathTestCase("interfaceSliceNegative", "{ .interfaces[-2] }", types, "1"));
+        data.Add(new JsonPathTestCase("interfaceSubSlice", "{ .interfaces[:2] }", types, "true one"));
+        data.Add(new JsonPathTestCase("interfaceSubSliceStep", "{ .interfaces[:4:2] }", types, "true 1"));
+        data.Add(new JsonPathTestCase("mapSlice", "{ .maps }", types,
+            "[{\"name\":\"one\",\"value\":1},{\"name\":\"two\",\"value\":2.02},{\"name\":\"three\",\"value\":3.03},{\"name\":\"four\",\"value\":4.04}]"));
+        data.Add(new JsonPathTestCase("mapSliceIndex", "{ .maps[0] }", types, "{\"name\":\"one\",\"value\":1}"));
+        data.Add(new JsonPathTestCase("mapSliceNegative", "{ .maps[-2] }", types, "{\"name\":\"three\",\"value\":3.03}"));
+        data.Add(new JsonPathTestCase("mapSubSlice", "{ .maps[:2] }", types, "{\"name\":\"one\",\"value\":1} {\"name\":\"two\",\"value\":2.02}"));
+        data.Add(new JsonPathTestCase("mapSubSliceStep", "{ .maps[::2] }", types, "{\"name\":\"one\",\"value\":1} {\"name\":\"three\",\"value\":3.03}"));
+        data.Add(new JsonPathTestCase("structSlice", "{ .structs }", types,
             "[{\"name\":\"one\",\"value\":1,\"type\":\"integer\"},{\"name\":\"two\",\"value\":2.002,\"type\":\"float\"},{\"name\":\"three\",\"value\":3,\"type\":\"integer\"},{\"name\":\"four\",\"value\":4.004,\"type\":\"float\"}]"));
-        tests.Add(new("structSliceIndex", "{ .structs[0] }", types, "{\"name\":\"one\",\"value\":1,\"type\":\"integer\"}"));
-        tests.Add(new("structSliceNegative", "{ .structs[-2] }", types, "{\"name\":\"three\",\"value\":3,\"type\":\"integer\"}"));
-        tests.Add(new("structSubSlice", "{ .structs[:2] }", types,
+        data.Add(new JsonPathTestCase("structSliceIndex", "{ .structs[0] }", types, "{\"name\":\"one\",\"value\":1,\"type\":\"integer\"}"));
+        data.Add(new JsonPathTestCase("structSliceNegative", "{ .structs[-2] }", types, "{\"name\":\"three\",\"value\":3,\"type\":\"integer\"}"));
+        data.Add(new JsonPathTestCase("structSubSlice", "{ .structs[:2] }", types,
             "{\"name\":\"one\",\"value\":1,\"type\":\"integer\"} {\"name\":\"two\",\"value\":2.002,\"type\":\"float\"}"));
-        tests.Add(new("structSubSliceStep", "{ .structs[::2] }", types,
+        data.Add(new JsonPathTestCase("structSubSliceStep", "{ .structs[::2] }", types,
             "{\"name\":\"one\",\"value\":1,\"type\":\"integer\"} {\"name\":\"three\",\"value\":3,\"type\":\"integer\"}"));
 
-        RunTests(tests);
+        return data;
     }
 
-    [Fact]
-    public void StructInput()
+    private static TheoryData<JsonPathTestCase> CreateStructInputData()
     {
-        var store = new Store
-        {
-            Name = "jsonpath",
-            Book = new List<Book>
-            {
-                new("reference", "Nigel Rees", "Sayings of the Centurey", 8.95f),
-                new("fiction", "Evelyn Waugh", "Sword of Honour", 12.99f),
-                new("fiction", "Herman Melville", "Moby Dick", 8.99f),
-            },
-            Bicycle = new List<Bicycle>
-            {
-                new("red", 19.95f, true),
-                new("green", 20.01f, false),
-            },
-            Labels = new Dictionary<string, int>
-            {
-                ["engieer"] = 10,
-                ["web/html"] = 15,
-                ["k8s-app"] = 20,
-            },
-            Employees = new Dictionary<string, string>
-            {
-                ["jason"] = "manager",
-                ["dan"] = "clerk",
-            },
-        };
+        var store = CreateStore();
 
-        var tests = new List<JsonPathTestCase>
-        {
-            new("plain", "hello jsonpath", null, "hello jsonpath"),
-            new("recursive", "{..}", new[] { 1, 2, 3 }, "[1,2,3]"),
-            new("filter", "{[?(@<5)]}", new[] { 2, 6, 3, 7 }, "2 3"),
-            new("quote", "{\"{\"}", null, "{"),
-            new("union", "{[1,3,4]}", new[] { 0, 1, 2, 3, 4 }, "1 3 4"),
-            new("array", "{[0:2]}", new[] { "Monday", "Tuesday" }, "Monday Tuesday"),
-            new("variable", "hello {.Name}", store, "hello jsonpath"),
-            new("dict slash", "{$.Labels.web/html}", store, "15"),
-            new("dict index", "{$.Employees.jason}", store, "manager"),
-            new("dict index 2", "{$.Employees.dan}", store, "clerk"),
-            new("dict dash", "{.Labels.k8s-app}", store, "20"),
-            new("nested", "{.Bicycle[*].Color}", store, "red green"),
-            new("all authors", "{.Book[*].Author}", store, "Nigel Rees Evelyn Waugh Herman Melville"),
-            new("all fields", "{range .Bicycle[*]}{ \"{\" }{ @.* }{ \"} \" }{end}", store, "{red 19.95 true} {green 20.01 false} "),
-            new("recursive price", "{..Price}", store, "8.95 12.99 8.99 19.95 20.01"),
-            new("recursive dot price", "{...Price}", store, "8.95 12.99 8.99 19.95 20.01"),
-            new("all bicycles", "{.Bicycle}", store,
-                "[{\"Color\":\"red\",\"Price\":19.95,\"IsNew\":true},{\"Color\":\"green\",\"Price\":20.01,\"IsNew\":false}]")
-        };
-        tests.Add(new("all struct", "{range .Bicycle[*]}{ @ }{ \" \" }{end}", store,
+        var data = new TheoryData<JsonPathTestCase>();
+        data.Add(new JsonPathTestCase("plain", "hello jsonpath", null, "hello jsonpath"));
+        data.Add(new JsonPathTestCase("recursive", "{..}", new[] { 1, 2, 3 }, "[1,2,3]"));
+        data.Add(new JsonPathTestCase("filter", "{[?(@<5)]}", new[] { 2, 6, 3, 7 }, "2 3"));
+        data.Add(new JsonPathTestCase("quote", "{\"{\"}", null, "{"));
+        data.Add(new JsonPathTestCase("union", "{[1,3,4]}", new[] { 0, 1, 2, 3, 4 }, "1 3 4"));
+        data.Add(new JsonPathTestCase("array", "{[0:2]}", new[] { "Monday", "Tuesday" }, "Monday Tuesday"));
+        data.Add(new JsonPathTestCase("variable", "hello {.Name}", store, "hello jsonpath"));
+        data.Add(new JsonPathTestCase("dict slash", "{$.Labels.web/html}", store, "15"));
+        data.Add(new JsonPathTestCase("dict index", "{$.Employees.jason}", store, "manager"));
+        data.Add(new JsonPathTestCase("dict index 2", "{$.Employees.dan}", store, "clerk"));
+        data.Add(new JsonPathTestCase("dict dash", "{.Labels.k8s-app}", store, "20"));
+        data.Add(new JsonPathTestCase("nested", "{.Bicycle[*].Color}", store, "red green"));
+        data.Add(new JsonPathTestCase("all authors", "{.Book[*].Author}", store, "Nigel Rees Evelyn Waugh Herman Melville"));
+        data.Add(new JsonPathTestCase("all fields", "{range .Bicycle[*]}{ \"{\" }{ @.* }{ \"} \" }{end}", store, "{red 19.95 true} {green 20.01 false} "));
+        data.Add(new JsonPathTestCase("recursive price", "{..Price}", store, "8.95 12.99 8.99 19.95 20.01"));
+        data.Add(new JsonPathTestCase("recursive dot price", "{...Price}", store, "8.95 12.99 8.99 19.95 20.01"));
+        data.Add(new JsonPathTestCase("all bicycles", "{.Bicycle}", store,
+            "[{\"Color\":\"red\",\"Price\":19.95,\"IsNew\":true},{\"Color\":\"green\",\"Price\":20.01,\"IsNew\":false}]"));
+        data.Add(new JsonPathTestCase("all struct", "{range .Bicycle[*]}{ @ }{ \" \" }{end}", store,
             "{\"Color\":\"red\",\"Price\":19.95,\"IsNew\":true} {\"Color\":\"green\",\"Price\":20.01,\"IsNew\":false} "));
-        tests.Add(new("last array", "{.Book[-1:]}", store,
+        data.Add(new JsonPathTestCase("last array", "{.Book[-1:]}", store,
             "{\"Category\":\"fiction\",\"Author\":\"Herman Melville\",\"Title\":\"Moby Dick\",\"Price\":8.99}"));
-        tests.Add(new("recursive array", "{..Book[2]}", store,
+        data.Add(new JsonPathTestCase("recursive array", "{..Book[2]}", store,
             "{\"Category\":\"fiction\",\"Author\":\"Herman Melville\",\"Title\":\"Moby Dick\",\"Price\":8.99}"));
-        tests.Add(new("bool filter", "{.Bicycle[?(@.IsNew==true)]}", store,
+        data.Add(new JsonPathTestCase("bool filter", "{.Bicycle[?(@.IsNew==true)]}", store,
             "{\"Color\":\"red\",\"Price\":19.95,\"IsNew\":true}"));
 
-        RunTests(tests);
-
-        var missingKeyTests = new List<JsonPathTestCase>
-        {
-            new("missing", "{.hello}", store, string.Empty),
-            new("missing with text", "before-{.hello}after", store, "before-after"),
-        };
-        RunTests(missingKeyTests, allowMissingKeys: true);
-
-        var failTests = new List<JsonPathTestCase>
-        {
-            new("invalid identifier", "{hello}", store, "unrecognized identifier", true),
-            new("missing field", "{.hello}", store, "is not found", true),
-            new("invalid array", "{.Labels[0]}", store, "is not array or slice", true),
-            new("invalid filter operator", "{.Book[?(@.Price<>10)]}", store, "unrecognized filter operator", true),
-            new("redundant end", "{range .Labels.*}{@}{end}{end}", store, "not in range", true),
-        };
-        RunTestsExpectFailure(failTests);
+        return data;
     }
 
-    [Fact]
-    public void JsonInput()
+    private static TheoryData<JsonPathTestCase> CreateStructInputAllowMissingData()
+    {
+        var store = CreateStore();
+
+        var data = new TheoryData<JsonPathTestCase>();
+        data.Add(new JsonPathTestCase("missing", "{.hello}", store, string.Empty));
+        data.Add(new JsonPathTestCase("missing with text", "before-{.hello}after", store, "before-after"));
+        return data;
+    }
+
+    private static TheoryData<JsonPathTestCase> CreateStructInputFailureData()
+    {
+        var store = CreateStore();
+
+        var data = new TheoryData<JsonPathTestCase>();
+        data.Add(new JsonPathTestCase("invalid identifier", "{hello}", store, "unrecognized identifier", true));
+        data.Add(new JsonPathTestCase("missing field", "{.hello}", store, "is not found", true));
+        data.Add(new JsonPathTestCase("invalid array", "{.Labels[0]}", store, "is not array or slice", true));
+        data.Add(new JsonPathTestCase("invalid filter operator", "{.Book[?(@.Price<>10)]}", store, "unrecognized filter operator", true));
+        data.Add(new JsonPathTestCase("redundant end", "{range .Labels.*}{@}{end}{end}", store, "not in range", true));
+        return data;
+    }
+
+    private static TheoryData<JsonPathTestCase> CreateJsonInputData()
     {
         var json = """
         [
@@ -181,130 +263,87 @@ public sealed class JsonPathTests
         """;
 
         var document = JsonDocument.Parse(json);
-        var tests = new List<JsonPathTestCase>
-        {
-            new("exists filter", "{[?(@.z)].id}", document.RootElement, "i2 i5"),
-            new("bracket key", "{[0]['id']}", document.RootElement, "i1"),
-            new("nil value", "{[-1]['x']}", document.RootElement, "null"),
-        };
+        var root = document.RootElement.Clone();
 
-        RunTests(tests);
+        var data = new TheoryData<JsonPathTestCase>();
+        data.Add(new JsonPathTestCase("exists filter", "{[?(@.z)].id}", root, "i2 i5"));
+        data.Add(new JsonPathTestCase("bracket key", "{[0]['id']}", root, "i1"));
+        data.Add(new JsonPathTestCase("nil value", "{[-1]['x']}", root, "null"));
+        return data;
     }
 
-    [Fact]
-    public void KubernetesSamples()
+    private static TheoryData<JsonPathTestCase> CreateKubernetesSampleData()
     {
         var json = File.ReadAllText("TestData/kubernetes.json");
         var document = JsonDocument.Parse(json);
+        var root = document.RootElement.Clone();
 
-        var tests = new List<JsonPathTestCase>
-        {
-            new("range item", "{range .items[*]}{.metadata.name}, {end}{.kind}", document.RootElement, "127.0.0.1, 127.0.0.2, List"),
-            new("range item with quote", "{range .items[*]}{.metadata.name}{\"\t\"}{end}", document.RootElement, "127.0.0.1\t127.0.0.2\t"),
-            new("range addresses", "{.items[*].status.addresses[*].address}", document.RootElement, "127.0.0.1 127.0.0.2 127.0.0.3"),
-            new("double range", "{range .items[*]}{range .status.addresses[*]}{.address}, {end}{end}", document.RootElement,
-                "127.0.0.1, 127.0.0.2, 127.0.0.3, "),
-            new("item name", "{.items[*].metadata.name}", document.RootElement, "127.0.0.1 127.0.0.2"),
-            new("union capacity", "{.items[*]['metadata.name', 'status.capacity']}", document.RootElement,
-                "127.0.0.1 127.0.0.2 {\"cpu\":\"4\"} {\"cpu\":\"8\"}"),
-            new("range capacity", "{range .items[*]}[{.metadata.name}, {.status.capacity}] {end}", document.RootElement,
-                "[127.0.0.1, {\"cpu\":\"4\"}] [127.0.0.2, {\"cpu\":\"8\"}] "),
-            new("user password", "{.users[?(@.name==\"e2e\")].user.password}", document.RootElement, "secret"),
-            new("hostname", "{.items[0].metadata.labels.kubernetes\\.io/hostname}", document.RootElement, "127.0.0.1"),
-            new("hostname filter", "{.items[?(@.metadata.labels.kubernetes\\.io/hostname==\"127.0.0.1\")].kind}", document.RootElement, "None"),
-            new("bool item", "{.items[?(@..ready==true)].metadata.name}", document.RootElement, "127.0.0.1"),
-        };
+        var data = new TheoryData<JsonPathTestCase>();
+        data.Add(new JsonPathTestCase("range item", "{range .items[*]}{.metadata.name}, {end}{.kind}", root, "127.0.0.1, 127.0.0.2, List"));
+        data.Add(new JsonPathTestCase("range item with quote", "{range .items[*]}{.metadata.name}{\"\t\"}{end}", root, "127.0.0.1\t127.0.0.2\t"));
+        data.Add(new JsonPathTestCase("range addresses", "{.items[*].status.addresses[*].address}", root, "127.0.0.1 127.0.0.2 127.0.0.3"));
+        data.Add(new JsonPathTestCase("double range", "{range .items[*]}{range .status.addresses[*]}{.address}, {end}{end}", root,
+            "127.0.0.1, 127.0.0.2, 127.0.0.3, "));
+        data.Add(new JsonPathTestCase("item name", "{.items[*].metadata.name}", root, "127.0.0.1 127.0.0.2"));
+        data.Add(new JsonPathTestCase("union capacity", "{.items[*]['metadata.name', 'status.capacity']}", root,
+            "127.0.0.1 127.0.0.2 {\"cpu\":\"4\"} {\"cpu\":\"8\"}"));
+        data.Add(new JsonPathTestCase("range capacity", "{range .items[*]}[{.metadata.name}, {.status.capacity}] {end}", root,
+            "[127.0.0.1, {\"cpu\":\"4\"}] [127.0.0.2, {\"cpu\":\"8\"}] "));
+        data.Add(new JsonPathTestCase("user password", "{.users[?(@.name==\"e2e\")].user.password}", root, "secret"));
+        data.Add(new JsonPathTestCase("hostname", "{.items[0].metadata.labels.kubernetes\\.io/hostname}", root, "127.0.0.1"));
+        data.Add(new JsonPathTestCase("hostname filter", "{.items[?(@.metadata.labels.kubernetes\\.io/hostname==\"127.0.0.1\")].kind}", root, "None"));
+        data.Add(new JsonPathTestCase("bool item", "{.items[?(@..ready==true)].metadata.name}", root, "127.0.0.1"));
 
-        RunTests(tests);
-
-        var randomOrder = new List<JsonPathTestCase>
-        {
-            new("recursive name", "{..name}", document.RootElement, "127.0.0.1 127.0.0.2 myself e2e"),
-        };
-        RunTestsSorted(randomOrder);
+        return data;
     }
 
-    [Fact]
-    public void EmptyRangeIsValid()
+    private static TheoryData<JsonPathTestCase> CreateKubernetesSampleSortedData()
     {
-        var json = JsonDocument.Parse("{\"items\":[]}");
-        var tests = new List<JsonPathTestCase>
-        {
-            new("empty range", "{range .items[*]}{.metadata.name}{end}", json.RootElement, string.Empty),
-        };
+        var json = File.ReadAllText("TestData/kubernetes.json");
+        var document = JsonDocument.Parse(json);
+        var root = document.RootElement.Clone();
 
-        RunTests(tests);
+        var data = new TheoryData<JsonPathTestCase>();
+        data.Add(new JsonPathTestCase("recursive name", "{..name}", root, "127.0.0.1 127.0.0.2 myself e2e"));
+        return data;
     }
 
-    [Fact]
-    public void JsonOutputCanBeEnabled()
+    private static TheoryData<JsonPathTestCase> CreateEmptyRangeData()
     {
-        var store = new Store
-        {
-            Name = "jsonpath",
-            Book = new List<Book> { new("reference", "Nigel Rees", "Sayings", 8.95f) }
-        };
+        var document = JsonDocument.Parse("{\"items\":[]}");
+        var root = document.RootElement.Clone();
 
-        var jsonPath = new JsonPath("json-output");
-        jsonPath.Parse("{.Book}");
-        jsonPath.EnableJsonOutput(true);
-        var writer = new StringWriter();
-        jsonPath.Execute(writer, store);
-        var output = writer.ToString();
-        Assert.Equal("[\n  [\n    {\n      \"Category\": \"reference\",\n      \"Author\": \"Nigel Rees\",\n      \"Title\": \"Sayings\",\n      \"Price\": 8.95\n    }\n  ]\n]\n", output);
+        var data = new TheoryData<JsonPathTestCase>();
+        data.Add(new JsonPathTestCase("empty range", "{range .items[*]}{.metadata.name}{end}", root, string.Empty));
+        return data;
     }
 
-    private static void RunTests(IEnumerable<JsonPathTestCase> tests, bool allowMissingKeys = false)
+    private static Store CreateStore() => new()
     {
-        foreach (var test in tests)
+        Name = "jsonpath",
+        Book = new List<Book>
         {
-            var jsonPath = new JsonPath(test.Name).AllowMissingKeys(allowMissingKeys);
-            var parseException = Record.Exception(() => jsonPath.Parse(test.Template));
-            Assert.Null(parseException);
-
-            var writer = new StringWriter();
-            var executeException = Record.Exception(() => jsonPath.Execute(writer, test.Input));
-            Assert.Null(executeException);
-            Assert.Equal(test.Expected, writer.ToString());
-        }
-    }
-
-    private static void RunTestsSorted(IEnumerable<JsonPathTestCase> tests)
-    {
-        foreach (var test in tests)
+            new("reference", "Nigel Rees", "Sayings of the Centurey", 8.95f),
+            new("fiction", "Evelyn Waugh", "Sword of Honour", 12.99f),
+            new("fiction", "Herman Melville", "Moby Dick", 8.99f),
+        },
+        Bicycle = new List<Bicycle>
         {
-            var jsonPath = new JsonPath(test.Name);
-            jsonPath.Parse(test.Template);
-            var writer = new StringWriter();
-            jsonPath.Execute(writer, test.Input);
-            var output = writer.ToString();
-            var sortedOutput = output.Split(' ', StringSplitOptions.RemoveEmptyEntries).OrderBy(x => x).ToArray();
-            var sortedExpected = test.Expected.Split(' ', StringSplitOptions.RemoveEmptyEntries).OrderBy(x => x).ToArray();
-            Assert.Equal(sortedExpected, sortedOutput);
-        }
-    }
-
-    private static void RunTestsExpectFailure(IEnumerable<JsonPathTestCase> tests)
-    {
-        foreach (var test in tests)
+            new("red", 19.95f, true),
+            new("green", 20.01f, false),
+        },
+        Labels = new Dictionary<string, int>
         {
-            var jsonPath = new JsonPath(test.Name);
-            if (test.Template is not null)
-            {
-                var parseException = Record.Exception(() => jsonPath.Parse(test.Template));
-                if (parseException != null)
-                {
-                    Assert.Contains(test.Expected, parseException.Message);
-                    continue;
-                }
-            }
-
-            var writer = new StringWriter();
-            var executeException = Record.Exception(() => jsonPath.Execute(writer, test.Input));
-            Assert.True(executeException is not null, $"Expected exception for {test.Name}");
-            Assert.Contains(test.Expected, executeException!.Message);
-        }
-    }
+            ["engieer"] = 10,
+            ["web/html"] = 15,
+            ["k8s-app"] = 20,
+        },
+        Employees = new Dictionary<string, string>
+        {
+            ["jason"] = "manager",
+            ["dan"] = "clerk",
+        },
+    };
 
     private record TestStruct([property: JsonPropertyName("name")] string Name,
         [property: JsonPropertyName("value")] object Value,
