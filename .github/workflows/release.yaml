@@ -7,6 +7,9 @@ on:
       - 'main'
       - 'alpha'
       - 'beta'
+  pull_request:
+    types: [opened, reopened, synchronize]
+  merge_group:
 
 jobs:
   get-version:
@@ -52,3 +55,4 @@ jobs:
     - uses: IvanJosipovic/templates/.github/actions/csharp-publish-nuget@main
       env:
         NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+
