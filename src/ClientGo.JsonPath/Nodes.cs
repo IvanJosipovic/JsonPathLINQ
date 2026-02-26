@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace ClientGo.JsonPath;
 
-internal enum NodeType
+public enum NodeType
 {
     Text,
     Array,
@@ -20,12 +20,12 @@ internal enum NodeType
     Bool,
 }
 
-internal interface INode
+public interface INode
 {
     NodeType Type { get; }
 }
 
-internal sealed class ListNode : INode
+public sealed class ListNode : INode
 {
     public NodeType Type => NodeType.List;
 

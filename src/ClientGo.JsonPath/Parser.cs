@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 
 namespace ClientGo.JsonPath;
 
-internal sealed class Parser
+public sealed class Parser
 {
     private const char Eof = '\uffff';
     private const string LeftDelim = "{";

@@ -66,8 +66,8 @@ public class UnitTest1
 
     public static IEnumerable<object[]> GetValueTests()
     {
-        return new List<object[]>
-        {
+        return
+        [
             new object[] { ".stringValue", "TestString", false },
             new object[] { ".intValue", 7, false },
             new object[] { ".boolValue", false, false },
@@ -93,7 +93,7 @@ public class UnitTest1
 
             new object[] { ".nullSubClassList[?(@.Type==\"3\")].Status", "", true },
             new object[] { ".nullSubClassList[?(@.Nested.Name==\"Nested3\")].Status", "", true },
-        };
+        ];
     }
 
     [Theory]

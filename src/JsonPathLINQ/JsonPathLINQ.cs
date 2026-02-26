@@ -1,4 +1,5 @@
-﻿using JsonPathExpressions;
+﻿using ClientGo.JsonPath;
+using JsonPathExpressions;
 using JsonPathExpressions.Elements;
 using System.Linq.Expressions;
 
@@ -13,63 +14,46 @@ namespace JsonPathLINQ
 
         public static Expression<Func<T, T2>> GetExpression<T,T2>(string jsonPath, bool addNullChecks = false)
         {
-            //hack to fix \.
-
-            var newToken = "\\--\\";
-
-            if (jsonPath.Contains("\\."))
+            if (jsonPath[0] != '{')
             {
-                jsonPath = jsonPath.Replace("\\.", newToken);
+                jsonPath = '{' + jsonPath;
+            }
+            if (jsonPath[^1] != '}')
+            {
+                jsonPath += '}';
             }
 
-            var jsonPathExpression = new JsonPathExpression(jsonPath).GetNormalized();
+            var jp = Parser.Parse("query", jsonPath);
 
-            var param = Expression.Parameter(typeof(T), "x");
+            Expression body = null;
 
-            Expression body = param;
-
-            foreach (var element in jsonPathExpression.Elements)
+            foreach (var node in jp.Root.Nodes)
             {
-                switch (element.Type)
+                switch (node.Type)
                 {
-                    case JsonPathElementType.Root:
+                    case NodeType.Text:
                         break;
-                    case JsonPathElementType.RecursiveDescent:
+                    case NodeType.Array:
                         break;
-                    case JsonPathElementType.Property:
-                        var propName = (((JsonPathPropertyElement)element).Name);
-
-                        if (propName.Contains(newToken))
-                        {
-                            propName = propName.Replace(newToken, ".");
-                        }
-
-                        body = PropertyOrFieldOrDictionaryKey<T2>(body, propName);
+                    case NodeType.List:
                         break;
-                    case JsonPathElementType.AnyProperty:
+                    case NodeType.Field:
                         break;
-                    case JsonPathElementType.PropertyList:
+                    case NodeType.Identifier:
                         break;
-                    case JsonPathElementType.ArrayIndex:
+                    case NodeType.Filter:
                         break;
-                    case JsonPathElementType.AnyArrayIndex:
+                    case NodeType.Int:
                         break;
-                    case JsonPathElementType.ArrayIndexList:
+                    case NodeType.Float:
                         break;
-                    case JsonPathElementType.ArraySlice:
+                    case NodeType.Wildcard:
                         break;
-                    case JsonPathElementType.Expression:
+                    case NodeType.Recursive:
                         break;
-                    case JsonPathElementType.FilterExpression:
-                        var type = body.Type.IsGenericType ? body.Type.GenericTypeArguments[0] : body.Type.GetElementType();
-
-                        var param2 = Expression.Parameter(type, "y");
-
-                        var filter = ProcessFilterExpression(param2, ((JsonPathFilterExpressionElement)element).Expression);
-
-                        var filterFunc = Expression.Lambda(Expression.GetFuncType([type, typeof(bool)]), filter, param2);
-
-                        body = Expression.Call(typeof(Enumerable), nameof(Enumerable.FirstOrDefault), [type], body, filterFunc);
+                    case NodeType.Union:
+                        break;
+                    case NodeType.Bool:
                         break;
                     default:
                         break;
@@ -83,7 +67,7 @@ namespace JsonPathLINQ
 
             Expression conversion = Expression.Convert(body, typeof(T2));
 
-            return Expression.Lambda<Func<T, T2>>(conversion, param);
+            return Expression.Lambda<Func<T, T2>>(conversion, Expression.Parameter(typeof(T), "x"));
         }
 
         public static object GetDefaultValue(Type type)
