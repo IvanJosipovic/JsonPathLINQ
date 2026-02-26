@@ -1,6 +1,6 @@
-using ClientGo.JsonPath;
+using JsonPathLINQ;
 
-namespace ClientGo.JsonPath.Tests;
+namespace JsonPathLINQ.Tests;
 
 public sealed class ParserTests
 {

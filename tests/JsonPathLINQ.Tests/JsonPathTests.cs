@@ -1,11 +1,7 @@
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using ClientGo.JsonPath;
 
-namespace ClientGo.JsonPath.Tests;
+namespace JsonPathLINQ.Tests;
 
 public record JsonPathTestCase(string Name, string Template, object? Input, string Expected, bool ExpectError = false);
 

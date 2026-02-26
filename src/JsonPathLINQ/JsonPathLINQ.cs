@@ -2,7 +2,6 @@ using System.Collections;
 using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
-using ClientGo.JsonPath;
 
 namespace JsonPathLINQ;
 

@@ -1,12 +1,11 @@
-using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace ClientGo.JsonPath;
+namespace JsonPathLINQ;
 
+// Ported from:
+// https://github.com/kubernetes/client-go/blob/764b57d77172907a6261543ac724c738ec00e83d/util/jsonpath/parser.go
 public sealed class Parser
 {
     private const char Eof = '\uffff';

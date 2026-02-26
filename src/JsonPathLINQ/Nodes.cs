@@ -1,8 +1,6 @@
-using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
 
-namespace ClientGo.JsonPath;
+namespace JsonPathLINQ;
 
 public enum NodeType
 {

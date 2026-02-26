@@ -22,8 +22,4 @@
         <None Include="..\..\README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
 
-    <ItemGroup>
-      <ProjectReference Include="..\ClientGo.JsonPath\ClientGo.JsonPath.csproj" />
-    </ItemGroup>
-
 </Project>
