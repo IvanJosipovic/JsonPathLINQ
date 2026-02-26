@@ -7,11 +7,26 @@ namespace JsonPathLINQ
 {
     public static class JsonPathLINQ
     {
+        /// <summary>
+        /// Returns a Expression representing the jsonPath
+        /// </summary>
+        /// <typeparam name="T">source object</typeparam>
+        /// <param name="jsonPath">jsonPath</param>
+        /// <param name="addNullChecks">add null checks</param>
+        /// <returns></returns>
         public static Expression<Func<T, object>> GetExpression<T>(string jsonPath, bool addNullChecks = false)
         {
             return GetExpression<T, object>(jsonPath, addNullChecks);
         }
 
+        /// <summary>
+        /// Returns a Expression representing the jsonPath
+        /// </summary>
+        /// <typeparam name="T">source object</typeparam>
+        /// <typeparam name="T2">return type</typeparam>
+        /// <param name="jsonPath">jsonPath</param>
+        /// <param name="addNullChecks">add null checks</param>
+        /// <returns></returns>
         public static Expression<Func<T, T2>> GetExpression<T,T2>(string jsonPath, bool addNullChecks = false)
         {
             if (jsonPath[0] != '{')
