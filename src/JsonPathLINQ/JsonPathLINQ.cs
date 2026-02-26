@@ -1,6 +1,4 @@
 ﻿using ClientGo.JsonPath;
-using JsonPathExpressions;
-using JsonPathExpressions.Elements;
 using System.Linq.Expressions;
 
 namespace JsonPathLINQ
