@@ -81,7 +81,7 @@ public sealed class JsonPathTests
         jsonPath.EnableJsonOutput(true);
         var writer = new StringWriter();
         jsonPath.Execute(writer, store);
-        var output = writer.ToString();
+        var output = writer.ToString().ReplaceLineEndings("\n");
         Assert.Equal("[\n  [\n    {\n      \"Category\": \"reference\",\n      \"Author\": \"Nigel Rees\",\n      \"Title\": \"Sayings\",\n      \"Price\": 8.95\n    }\n  ]\n]\n", output);
     }
 
