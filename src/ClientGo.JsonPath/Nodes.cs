@@ -42,7 +42,7 @@ public sealed class ListNode : INode
     public override string ToString() => Type.ToString();
 }
 
-internal sealed class TextNode : INode
+public sealed class TextNode : INode
 {
     public NodeType Type => NodeType.Text;
 
@@ -53,7 +53,7 @@ internal sealed class TextNode : INode
     public override string ToString() => $"{Type}: {Text}";
 }
 
-internal sealed class FieldNode : INode
+public sealed class FieldNode : INode
 {
     public NodeType Type => NodeType.Field;
 
@@ -64,7 +64,7 @@ internal sealed class FieldNode : INode
     public override string ToString() => $"{Type}: {Value}";
 }
 
-internal sealed class IdentifierNode : INode
+public sealed class IdentifierNode : INode
 {
     public NodeType Type => NodeType.Identifier;
 
@@ -75,7 +75,7 @@ internal sealed class IdentifierNode : INode
     public override string ToString() => $"{Type}: {Name}";
 }
 
-internal sealed class FilterNode : INode
+public sealed class FilterNode : INode
 {
     public NodeType Type => NodeType.Filter;
 
@@ -95,7 +95,7 @@ internal sealed class FilterNode : INode
     public override string ToString() => $"{Type}: {Left} {Operator} {Right}";
 }
 
-internal sealed class IntNode : INode
+public sealed class IntNode : INode
 {
     public NodeType Type => NodeType.Int;
 
@@ -106,7 +106,7 @@ internal sealed class IntNode : INode
     public override string ToString() => $"{Type}: {Value}";
 }
 
-internal sealed class FloatNode : INode
+public sealed class FloatNode : INode
 {
     public NodeType Type => NodeType.Float;
 
@@ -117,7 +117,7 @@ internal sealed class FloatNode : INode
     public override string ToString() => $"{Type}: {Value.ToString(CultureInfo.InvariantCulture)}";
 }
 
-internal sealed class BoolNode : INode
+public sealed class BoolNode : INode
 {
     public NodeType Type => NodeType.Bool;
 
@@ -128,21 +128,21 @@ internal sealed class BoolNode : INode
     public override string ToString() => $"{Type}: {Value}";
 }
 
-internal sealed class WildcardNode : INode
+public sealed class WildcardNode : INode
 {
     public NodeType Type => NodeType.Wildcard;
 
     public override string ToString() => Type.ToString();
 }
 
-internal sealed class RecursiveNode : INode
+public sealed class RecursiveNode : INode
 {
     public NodeType Type => NodeType.Recursive;
 
     public override string ToString() => Type.ToString();
 }
 
-internal sealed class UnionNode : INode
+public sealed class UnionNode : INode
 {
     public NodeType Type => NodeType.Union;
 
@@ -156,7 +156,7 @@ internal sealed class UnionNode : INode
     public override string ToString() => Type.ToString();
 }
 
-internal sealed class ArrayNode : INode
+public sealed class ArrayNode : INode
 {
     public NodeType Type => NodeType.Array;
 
@@ -170,7 +170,7 @@ internal sealed class ArrayNode : INode
     public override string ToString() => $"{Type}: {string.Join(",", Params.Select(p => p.ToString()))}";
 }
 
-internal struct ParamsEntry
+public struct ParamsEntry
 {
     public bool Known { get; set; }
 
