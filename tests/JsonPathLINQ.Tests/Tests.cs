@@ -1,6 +1,7 @@
-
 using ExpressionTreeToString;
 using Shouldly;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace JsonPathLINQ.Tests;
 
@@ -182,6 +183,82 @@ public class Tests
         expression.ToString().ShouldBe(value);
     }
 
+    public static IEnumerable<object[]> GetSystemTextJsonValueTests()
+    {
+        return
+        [
+            new object[] { ".MyNode.foo.bar", "baz" },
+            new object[] { ".MyElement.foo.bar", "baz" },
+            new object[] { ".MyDocument.foo.bar", "baz" },
+            new object[] { ".MyObject.foo.bar", "baz" },
+            new object[] { ".MyArray[1].name", "two" },
+            new object[] { ".MyValue", "terminal" },
+            new object[] { ".MyNode.foo.items[1].rank", 2 },
+            new object[] { ".MyElement.foo.items[?(@.ready==true)].name", "two" },
+            new object[] { ".MyDocument.foo.items[?(@.rank==2)].name", "two" },
+            new object[] { ".MyArray[?(@.nullable==null)].name", "three" },
+            new object[] { ".MixedItems[?(@.Payload.status.ready==true)].Name", "beta" },
+        ];
+    }
+
+    [Theory]
+    [MemberData(nameof(GetSystemTextJsonValueTests))]
+    public void SystemTextJsonValueTests(string jsonPath, object? expected)
+    {
+        var expression = JsonPathLINQ.GetExpression<SystemTextJsonHost>(jsonPath);
+        var result = expression.Compile().Invoke(CreateSystemTextJsonHost());
+
+        result.ShouldBe(expected);
+    }
+
+    [Fact]
+    public void SystemTextJsonTerminalContainersRemainNavigable()
+    {
+        var expression = JsonPathLINQ.GetExpression<SystemTextJsonHost>(".MyNode.foo.items");
+        var result = expression.Compile().Invoke(CreateSystemTextJsonHost());
+
+        result.ShouldBeOfType<JsonArray>();
+        ((JsonArray)result).Count.ShouldBe(3);
+    }
+
+    [Fact]
+    public void SystemTextJsonElementTerminalContainerRemainsJsonElement()
+    {
+        var expression = JsonPathLINQ.GetExpression<SystemTextJsonHost>(".MyElement.foo");
+        var result = expression.Compile().Invoke(CreateSystemTextJsonHost());
+
+        result.ShouldBeOfType<JsonElement>();
+        ((JsonElement)result).ValueKind.ShouldBe(JsonValueKind.Object);
+    }
+
+    [Fact]
+    public void SystemTextJsonNullChecksReturnNullForMissingJsonPath()
+    {
+        var expression = JsonPathLINQ.GetExpression<SystemTextJsonHost>(".MyNode.foo.missing.value", true);
+        var result = expression.Compile().Invoke(CreateSystemTextJsonHost());
+
+        result.ShouldBeNull();
+    }
+
+    [Fact]
+    public void SystemTextJsonMissingJsonPathWithoutNullChecksReturnsNull()
+    {
+        var expression = JsonPathLINQ.GetExpression<SystemTextJsonHost>(".MyDocument.foo.missing.value");
+        var result = expression.Compile().Invoke(CreateSystemTextJsonHost());
+
+        result.ShouldBeNull();
+    }
+
+    [Fact]
+    public void SystemTextJsonCanProjectDirectJsonObject()
+    {
+        var expression = JsonPathLINQ.GetExpression<SystemTextJsonHost>(".MyObject");
+        var result = expression.Compile().Invoke(CreateSystemTextJsonHost());
+
+        result.ShouldBeOfType<JsonObject>();
+        ((JsonObject)result)["foo"].ShouldNotBeNull();
+    }
+
     public class NullSortTestObject
     {
         public NestedObject? Nested { get; set; }
@@ -283,5 +360,68 @@ public class Tests
         var response = Expression.Lambda<Func<TestObject, object>>(conversion, queryExpression.Parameters);
 
         response.ToString().ShouldBe(value);
+    }
+
+    public sealed class SystemTextJsonHost
+    {
+        public JsonNode? MyNode { get; init; }
+
+        public JsonElement MyElement { get; init; }
+
+        public JsonDocument MyDocument { get; init; } = JsonDocument.Parse("{}");
+
+        public JsonObject MyObject { get; init; } = new();
+
+        public JsonArray MyArray { get; init; } = [];
+
+        public JsonValue MyValue { get; init; } = JsonValue.Create(string.Empty)!;
+
+        public List<MixedJsonItem> MixedItems { get; init; } = [];
+    }
+
+    public sealed class MixedJsonItem
+    {
+        public string Name { get; init; } = string.Empty;
+
+        public JsonNode? Payload { get; init; }
+    }
+
+    private static SystemTextJsonHost CreateSystemTextJsonHost()
+    {
+        var json = """
+        {
+          "foo": {
+            "bar": "baz",
+            "items": [
+              { "name": "one", "rank": 1, "ready": false, "nullable": "x" },
+              { "name": "two", "rank": 2, "ready": true, "nullable": "y" },
+              { "name": "three", "rank": 3, "ready": false, "nullable": null }
+            ]
+          }
+        }
+        """;
+
+        var document = JsonDocument.Parse(json);
+        return new SystemTextJsonHost
+        {
+            MyNode = JsonNode.Parse(json),
+            MyElement = document.RootElement.Clone(),
+            MyDocument = JsonDocument.Parse(json),
+            MyObject = JsonNode.Parse(json)!.AsObject(),
+            MyArray = JsonNode.Parse("""
+                [
+                  { "name": "one", "rank": 1, "nullable": "x" },
+                  { "name": "two", "rank": 2, "nullable": "y" },
+                  { "name": "three", "rank": 3, "nullable": null }
+                ]
+                """)!.AsArray(),
+            MyValue = JsonValue.Create("terminal")!,
+            MixedItems =
+            [
+                new MixedJsonItem { Name = "alpha", Payload = JsonNode.Parse("""{ "status": { "ready": false } }""") },
+                new MixedJsonItem { Name = "beta", Payload = JsonNode.Parse("""{ "status": { "ready": true } }""") },
+                new MixedJsonItem { Name = "gamma", Payload = JsonNode.Parse("""{ "status": { "ready": false } }""") },
+            ]
+        };
     }
 }
