@@ -148,7 +148,7 @@ public sealed class UnionNode : INode
 
     public UnionNode(IEnumerable<ListNode> nodes)
     {
-        Nodes = nodes.ToList();
+        Nodes = [.. nodes];
     }
 
     public override string ToString() => Type.ToString();
@@ -162,7 +162,7 @@ public sealed class ArrayNode : INode
 
     public ArrayNode(ParamsEntry[] @params)
     {
-        Params = @params.ToArray();
+        Params = [.. @params];
     }
 
     public override string ToString() => $"{Type}: {string.Join(",", Params.Select(p => p.ToString()))}";

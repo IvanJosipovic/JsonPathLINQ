@@ -2,13 +2,13 @@
 
     <PropertyGroup>
         <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
-        <LangVersion>latest</LangVersion>
+        <LangVersion>preview</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>JsonPathLINQ</PackageId>
         <Authors>Ivan Josipovic</Authors>
-        <Description>Converts JsonPath to Expressions</Description>
-        <PackageTags>JsonPath Expression</PackageTags>
+        <Description>Converts a limited subset of Kubernetes JSONPath to LINQ expressions for CLR and System.Text.Json object graphs</Description>
+        <PackageTags>JsonPath Kubernetes kubectl Expression LINQ System.Text.Json</PackageTags>
         <RepositoryUrl>https://github.com/IvanJosipovic/JsonPathLINQ</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -20,6 +20,10 @@
 
     <ItemGroup>
         <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="JsonPathLINQ.Tests" />
     </ItemGroup>
 
 </Project>
