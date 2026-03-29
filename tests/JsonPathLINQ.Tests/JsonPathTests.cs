@@ -177,9 +177,6 @@ public sealed class JsonPathTests
     {
         return new TheoryData<INode, string>
         {
-            { new WildcardNode(), "Wildcard" },
-            { new RecursiveNode(), "Recursive descent" },
-            { new UnionNode([]), "Union" },
             { new UnsupportedNode(), "Node type" },
             { new IdentifierNode("missing"), "Identifier node" },
         };
@@ -248,12 +245,13 @@ public sealed class JsonPathTests
     }
 
     [Theory]
-    [InlineData(".Name[0:2]", "single array index")]
-    [InlineData(".Name[-1]", "Negative indexes")]
-    public void GenerateRejectsUnsupportedArrayOperations(string jsonPath, string messageFragment)
+    [MemberData(nameof(GetAdvancedExpressionCases))]
+    public void GetExpressionSupportsParserFeaturesPreviouslyRejected(string jsonPath, object? expected)
     {
-        var exception = Assert.Throws<NotSupportedException>(() => JsonPath.GetExpression<SimpleHost>(jsonPath));
-        Assert.Contains(messageFragment, exception.Message, StringComparison.OrdinalIgnoreCase);
+        var expression = JsonPath.GetExpression<ExpressionTestObject>(jsonPath);
+        var result = expression.Compile()(JsonPathSharedTestData.CreateExpressionTestObject());
+
+        result.ShouldBe(expected);
     }
 
     [Fact]
@@ -265,6 +263,16 @@ public sealed class JsonPathTests
         Assert.Contains("Array parameters are not supported.", exception.Message, StringComparison.Ordinal);
     }
 
+    public static IEnumerable<object?[]> GetAdvancedExpressionCases()
+    {
+        yield return [".subClassList[*].Type", new object?[] { "1", "2", "3" }];
+        yield return [".subClassList[1:3].Type", new object?[] { "2", "3" }];
+        yield return [".subClassList[-1].Type", "3"];
+        yield return [".subClassList[0:3:2].Type", new object?[] { "1", "3" }];
+        yield return ["['stringValue','subClass.Type']", new object?[] { "TestString", "Type1" }];
+        yield return [".dictionary.*", new object?[] { "value", "value1" }];
+    }
+
     [Fact]
     public void GenerateCanIndexIntoTypedEnumerable()
     {
@@ -272,6 +280,31 @@ public sealed class JsonPathTests
         var result = expression.Compile()(new ArrayHost { Names = ["a", "b", "c"] });
 
         Assert.Equal("c", result);
+    }
+
+    [Fact]
+    public void GetExpressionSupportsRecursiveDescent()
+    {
+        var expression = JsonPath.GetExpression<RecursiveHost>("..Name");
+        var result = expression.Compile()(new RecursiveHost
+        {
+            Name = "root",
+            Child = new RecursiveHost
+            {
+                Name = "child",
+                Items =
+                [
+                    new RecursiveLeaf { Name = "leaf3" }
+                ]
+            },
+            Items =
+            [
+                new RecursiveLeaf { Name = "leaf1" },
+                new RecursiveLeaf { Name = "leaf2" }
+            ]
+        });
+
+        result.ShouldBe(new object?[] { "root", "child", "leaf3", "leaf1", "leaf2" });
     }
 
     [Fact]
@@ -566,6 +599,20 @@ public sealed class JsonPathTests
     private sealed class FilterExistsItem
     {
         public int Id { get; init; }
+    }
+
+    private sealed class RecursiveHost
+    {
+        public string Name { get; init; } = string.Empty;
+
+        public RecursiveHost? Child { get; init; }
+
+        public List<RecursiveLeaf> Items { get; init; } = [];
+    }
+
+    private sealed class RecursiveLeaf
+    {
+        public string Name { get; init; } = string.Empty;
     }
 
     public sealed class ExpressionTestObject

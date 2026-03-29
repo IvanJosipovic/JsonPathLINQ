@@ -1,5 +1,5 @@
 # JsonPathLINQ
-Generate LINQ Expressions from JsonPath.
+Generate LINQ expressions from Kubernetes JSONPath paths over CLR and `System.Text.Json` object graphs.
 
 [![Nuget](https://img.shields.io/nuget/vpre/JsonPathLINQ.svg?style=flat-square)](https://www.nuget.org/packages/JsonPathLINQ)
 [![Nuget)](https://img.shields.io/nuget/dt/JsonPathLINQ.svg?style=flat-square)](https://www.nuget.org/packages/JsonPathLINQ)
@@ -7,7 +7,7 @@ Generate LINQ Expressions from JsonPath.
 
 ## What it does
 
-`JsonPathLINQ` converts a JsonPath string into a Linq Expression:
+`JsonPathLINQ` converts Kubernetes JSONPath-style paths into LINQ expressions:
 
 ```csharp
 Expression<Func<T, TResult>>
@@ -27,20 +27,29 @@ var expression = JsonPath.GetExpression<T>(jsonPath, addNullChecks: false);
 var typedExpression = JsonPath.GetExpression<T, TResult>(jsonPath, addNullChecks: false);
 ```
 
+This library is focused on expression generation for the Kubernetes JSONPath dialect used by `kubectl`.
+
+- Inputs follow the Kubernetes JSONPath template/path dialect used by `kubectl`.
+- RFC 9535 style paths beginning with `$` are supported only for the subset implemented by the expression generator.
+- The primary goal of the package is expression generation over CLR and `System.Text.Json` object graphs, not complete JSONPath evaluation compatibility.
+
 ## Install
 
 ```powershell
 Install-Package JsonPathLINQ
 ```
 
-## Supported capabilities
+## Supported Kubernetes JSONPath Features
 
 The current expression generator supports:
 
 - field/property access: `.name`, `.parent.child`
 - case-insensitive CLR member lookup
 - dictionary key access: `.labels.key`, `.labels.crossplane\.io/external-name`
-- single array index access: `.items[0]`
+- array index and slice access: `.items[0]`, `.items[-1]`, `.items[1:4]`, `.items[0:6:2]`
+- wildcard segments: `*`
+- recursive descent: `..`
+- unions
 - collection filtering with `FirstOrDefault`: `.items[?(@.status=="Ready")]`
 - filter operators: `==`, `!=`, `<`, `>`, `<=`, `>=`
 - null literal in filters: `.items[?(@.nullable==null)]`
@@ -69,14 +78,11 @@ When the terminal JSON value is an object or array, the expression keeps it as a
 
 The library does not currently generate expressions for:
 
-- wildcard segments: `*`
-- recursive descent: `..`
-- unions
 - multi-select roots or templates with multiple root actions
-- array slicing / ranges / steps in generated expressions
-- negative array indexes in generated expressions
+- full Kubernetes template evaluation semantics
+- full RFC 9535 JSONPath compliance
 
-The broader system tests in this repository cover more JsonPath behavior for evaluation semantics, but the generated expression API only supports the subset listed above.
+The broader tests in this repository cover more parser and template behavior, but the generated expression API is still intentionally scoped to the features listed above.
 
 ## Examples
 
@@ -159,6 +165,9 @@ var result = compiled(instance);
 
 ## Notes
 
-- Paths may be passed with or without outer `{}`.
+- Kubernetes-style paths may be passed with or without outer `{}`.
+- Template-style inputs such as `hello {.Name}` are part of the Kubernetes JSONPath dialect, not RFC 9535 JSONPath.
+- `$...` paths use the RFC-oriented parser path, but only the subset listed above is currently supported for expression generation.
 - The generator expects a single root action.
 - The generated filter behavior is based on `Enumerable.FirstOrDefault(...)`, so a filter selects one matching item rather than projecting all matches.
+- Paths that naturally project multiple values such as wildcards, unions, recursive descent, and slices return an `object?[]` when used through `GetExpression<T>(...)`.

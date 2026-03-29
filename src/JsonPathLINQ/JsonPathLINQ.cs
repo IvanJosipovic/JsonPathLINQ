@@ -38,6 +38,7 @@ public static class JsonPath
     private static readonly MethodInfo GetJsonElementValueOrSelfMethod = GetMethod(nameof(GetJsonElementValueOrSelf));
     private static readonly MethodInfo GetJsonNodeValueOrSelfMethod = GetMethod(nameof(GetJsonNodeValueOrSelf));
     private static readonly MethodInfo GetJsonDocumentValueOrSelfMethod = GetMethod(nameof(GetJsonDocumentValueOrSelf));
+    private static readonly MethodInfo EvaluateRuntimePathMethod = GetMethod(nameof(EvaluateRuntimePath));
 
     /// <summary>
     /// Returns a Expression representing the jsonPath
@@ -81,8 +82,19 @@ public static class JsonPath
         }
 
         var parameter = Expression.Parameter(typeof(T), "x");
-        Expression body = Generate(jp.Root.Nodes[0], parameter);
-        body = NormalizeTerminalExpression(body);
+        Expression body;
+        if (RequiresRuntimeEvaluation(jp.Root.Nodes[0]))
+        {
+            body = Expression.Call(
+                EvaluateRuntimePathMethod,
+                Expression.Constant(jp.Root.Nodes[0], typeof(INode)),
+                Expression.Convert(parameter, typeof(object)));
+        }
+        else
+        {
+            body = Generate(jp.Root.Nodes[0], parameter);
+            body = NormalizeTerminalExpression(body);
+        }
 
         if (addNullChecks)
         {
@@ -105,7 +117,9 @@ public static class JsonPath
     {
         ArgumentNullException.ThrowIfNull(node);
         var parameter = Expression.Parameter(typeof(object), "x");
-        return Generate(node, parameter);
+        return RequiresRuntimeEvaluation(node)
+            ? Expression.Call(EvaluateRuntimePathMethod, Expression.Constant(node, typeof(INode)), parameter)
+            : Generate(node, parameter);
     }
 
     public static Expression CreateNullChecks(Expression expression)
@@ -150,6 +164,20 @@ public static class JsonPath
             RecursiveNode => throw new NotSupportedException("Recursive descent is not supported in expression generation."),
             UnionNode => throw new NotSupportedException("Union is not supported in expression generation."),
             _ => throw new NotSupportedException($"Node type '{node.Type}' is not supported.")
+        };
+    }
+
+    private static bool RequiresRuntimeEvaluation(INode node)
+    {
+        return node switch
+        {
+            WildcardNode => true,
+            RecursiveNode => true,
+            UnionNode => true,
+            ArrayNode arrayNode => arrayNode.Params.Length != 3 || !IsSupportedSingleIndex(arrayNode) || arrayNode.Params[0].Value < 0,
+            FilterNode filterNode => RequiresRuntimeEvaluation(filterNode.Left) || RequiresRuntimeEvaluation(filterNode.Right),
+            ListNode listNode => listNode.Nodes.Any(RequiresRuntimeEvaluation),
+            _ => false
         };
     }
 
@@ -210,16 +238,12 @@ public static class JsonPath
             throw new NotSupportedException("Array parameters are not supported.");
         }
 
-        var start = node.Params[0];
-        var end = node.Params[1];
-        var step = node.Params[2];
-
-        var isSingleIndex = start.Known && end.Known && end.Derived && !step.Known;
-        if (!isSingleIndex)
+        if (!IsSupportedSingleIndex(node))
         {
             throw new NotSupportedException("Only single array index access is supported.");
         }
 
+        var start = node.Params[0];
         if (start.Value < 0)
         {
             throw new NotSupportedException("Negative indexes are not supported.");
@@ -241,6 +265,19 @@ public static class JsonPath
         var elementType = GetEnumerableElementType(source.Type) ?? throw new NotSupportedException($"'{source.Type}' is not enumerable.");
         var enumerable = EnsureEnumerable(source, elementType);
         return Expression.Call(EnumerableElementAt.MakeGenericMethod(elementType), enumerable, Expression.Constant(start.Value));
+    }
+
+    private static bool IsSupportedSingleIndex(ArrayNode node)
+    {
+        if (node.Params.Length != 3)
+        {
+            return false;
+        }
+
+        var start = node.Params[0];
+        var end = node.Params[1];
+        var step = node.Params[2];
+        return start.Known && end.Known && end.Derived && !step.Known;
     }
 
     private static Expression GenerateFilter(FilterNode node, Expression source)
@@ -900,6 +937,527 @@ public static class JsonPath
             "<=" => comparison <= 0,
             ">=" => comparison >= 0,
             _ => throw new NotSupportedException($"Filter operator '{@operator}' is not supported.")
+        };
+    }
+
+    internal static object? EvaluateRuntimePath(INode node, object? input)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+
+        var results = EvaluateRuntimeNodes(node is ListNode listNode ? listNode.Nodes : [node], [input]);
+        return CollapseRuntimeResults(results);
+    }
+
+    private static List<object?> EvaluateRuntimeNodes(IReadOnlyList<INode> nodes, List<object?> currentValues)
+    {
+        var results = currentValues;
+
+        for (var i = 0; i < nodes.Count; i++)
+        {
+            var node = nodes[i];
+            results = node switch
+            {
+                ListNode listNode => EvaluateRuntimeNodes(listNode.Nodes, results),
+                FieldNode fieldNode => ApplyRuntimeField(results, fieldNode.Value),
+                ArrayNode arrayNode => ApplyRuntimeArray(results, arrayNode),
+                FilterNode filterNode => ApplyRuntimeFilter(results, filterNode),
+                WildcardNode => ApplyRuntimeWildcard(results),
+                RecursiveNode when i < nodes.Count - 1 => ApplyRuntimeRecursive(results),
+                RecursiveNode => results,
+                UnionNode unionNode => ApplyRuntimeUnion(results, unionNode),
+                TextNode textNode => [textNode.Text],
+                IntNode intNode => [intNode.Value],
+                FloatNode floatNode => [floatNode.Value],
+                BoolNode boolNode => [boolNode.Value],
+                IdentifierNode identifierNode => ApplyRuntimeIdentifier(identifierNode),
+                _ => throw new NotSupportedException($"Node type '{node.Type}' is not supported.")
+            };
+        }
+
+        return results;
+    }
+
+    private static List<object?> ApplyRuntimeField(IEnumerable<object?> values, string fieldName)
+    {
+        var results = new List<object?>();
+
+        foreach (var value in values)
+        {
+            if (TryGetRuntimeFieldValue(value, fieldName, out var fieldValue))
+            {
+                results.Add(fieldValue);
+            }
+        }
+
+        return results;
+    }
+
+    private static bool TryGetRuntimeFieldValue(object? source, string fieldName, out object? value)
+    {
+        if (source is null)
+        {
+            value = null;
+            return false;
+        }
+
+        if (source is JsonDocument document)
+        {
+            return TryGetRuntimeFieldValue(document.RootElement, fieldName, out value);
+        }
+
+        if (source is JsonElement element)
+        {
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                if (element.TryGetProperty(fieldName, out var elementProperty))
+                {
+                    value = ConvertJsonElementValue(elementProperty);
+                    return true;
+                }
+
+                foreach (var candidate in element.EnumerateObject())
+                {
+                    if (string.Equals(candidate.Name, fieldName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        value = ConvertJsonElementValue(candidate.Value);
+                        return true;
+                    }
+                }
+            }
+
+            value = null;
+            return false;
+        }
+
+        if (source is JsonNode node)
+        {
+            if (node is JsonObject jsonObject)
+            {
+                if (jsonObject.TryGetPropertyValue(fieldName, out var nodeProperty))
+                {
+                    value = ConvertJsonNodeValue(nodeProperty);
+                    return true;
+                }
+
+                foreach (var candidate in jsonObject)
+                {
+                    if (string.Equals(candidate.Key, fieldName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        value = ConvertJsonNodeValue(candidate.Value);
+                        return true;
+                    }
+                }
+            }
+
+            value = null;
+            return false;
+        }
+
+        if (source is IDictionary dictionary)
+        {
+            if (dictionary.Contains(fieldName))
+            {
+                value = dictionary[fieldName];
+                return true;
+            }
+
+            value = null;
+            return false;
+        }
+
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase;
+        var sourceType = source.GetType();
+
+        var property = sourceType.GetProperty(fieldName, flags);
+        if (property != null && property.GetIndexParameters().Length == 0)
+        {
+            value = property.GetValue(source);
+            return true;
+        }
+
+        var field = sourceType.GetField(fieldName, flags);
+        if (field != null)
+        {
+            value = field.GetValue(source);
+            return true;
+        }
+
+        foreach (var candidateProperty in sourceType.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+        {
+            if (candidateProperty.GetIndexParameters().Length != 0)
+            {
+                continue;
+            }
+
+            var jsonName = candidateProperty.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name;
+            if (string.Equals(jsonName, fieldName, StringComparison.OrdinalIgnoreCase))
+            {
+                value = candidateProperty.GetValue(source);
+                return true;
+            }
+        }
+
+        value = null;
+        return false;
+    }
+
+    private static List<object?> ApplyRuntimeArray(IEnumerable<object?> values, ArrayNode arrayNode)
+    {
+        var results = new List<object?>();
+
+        foreach (var value in values)
+        {
+            if (value is null)
+            {
+                continue;
+            }
+
+            var sequence = EnumerateRuntimeSequence(value);
+            results.AddRange(SelectRuntimeArrayItems(sequence, arrayNode));
+        }
+
+        return results;
+    }
+
+    private static List<object?> EnumerateRuntimeSequence(object value)
+    {
+        if (value is JsonDocument document)
+        {
+            return EnumerateRuntimeSequence(document.RootElement);
+        }
+
+        if (value is JsonElement element)
+        {
+            if (element.ValueKind != JsonValueKind.Array)
+            {
+                throw new NotSupportedException($"'{nameof(JsonElement)}' is not enumerable.");
+            }
+
+            return [.. element.EnumerateArray().Select(ConvertJsonElementValue)];
+        }
+
+        if (value is JsonArray jsonArray)
+        {
+            return [.. jsonArray.Select(ConvertJsonNodeValue)];
+        }
+
+        if (value is JsonNode jsonNode)
+        {
+            if (jsonNode is not JsonArray array)
+            {
+                throw new NotSupportedException($"'{jsonNode.GetType()}' is not enumerable.");
+            }
+
+            return [.. array.Select(ConvertJsonNodeValue)];
+        }
+
+        if (value is string || value is IDictionary || value is not IEnumerable enumerable)
+        {
+            throw new NotSupportedException($"'{value.GetType()}' is not enumerable.");
+        }
+
+        var sequence = new List<object?>();
+        foreach (var item in enumerable)
+        {
+            sequence.Add(item);
+        }
+
+        return sequence;
+    }
+
+    private static List<object?> SelectRuntimeArrayItems(List<object?> values, ArrayNode arrayNode)
+    {
+        if (arrayNode.Params.Length != 3)
+        {
+            throw new NotSupportedException("Array parameters are not supported.");
+        }
+
+        var first = arrayNode.Params[0];
+        var second = arrayNode.Params[1];
+        var third = arrayNode.Params[2];
+        var length = values.Count;
+
+        if (IsSupportedSingleIndex(arrayNode))
+        {
+            var index = ResolveRuntimeIndex(first.Value, length);
+            if (index < 0 || index >= length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(arrayNode));
+            }
+
+            return [values[index]];
+        }
+
+        var step = third.Known ? third.Value : 1;
+        if (step <= 0)
+        {
+            throw new NotSupportedException("Array step must be greater than zero.");
+        }
+
+        var start = first.Known ? ResolveRuntimeIndex(first.Value, length) : 0;
+        var end = second.Known ? ResolveRuntimeIndex(second.Value, length) : length;
+        start = Math.Clamp(start, 0, length);
+        end = Math.Clamp(end, 0, length);
+
+        if (start > end)
+        {
+            throw new NotSupportedException("Array start index cannot be greater than end index.");
+        }
+
+        var items = new List<object?>();
+        for (var i = start; i < end; i += step)
+        {
+            items.Add(values[i]);
+        }
+
+        return items;
+    }
+
+    private static int ResolveRuntimeIndex(int value, int length) => value < 0 ? length + value : value;
+
+    private static List<object?> ApplyRuntimeFilter(IEnumerable<object?> values, FilterNode filterNode)
+    {
+        var results = new List<object?>();
+
+        foreach (var value in values)
+        {
+            if (value is null)
+            {
+                continue;
+            }
+
+            foreach (var candidate in EnumerateRuntimeSequence(value))
+            {
+                if (MatchesRuntimeFilter(candidate, filterNode))
+                {
+                    results.Add(candidate);
+                    break;
+                }
+            }
+        }
+
+        return results;
+    }
+
+    private static bool MatchesRuntimeFilter(object? candidate, FilterNode filterNode)
+    {
+        var leftValues = EvaluateRuntimeNodes(filterNode.Left.Nodes, [candidate]);
+        if (filterNode.Operator == "exists")
+        {
+            return leftValues.Count > 0;
+        }
+
+        var rightValues = EvaluateRuntimeNodes(filterNode.Right.Nodes, [candidate]);
+        if (leftValues.Count == 0 || rightValues.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var leftValue in leftValues)
+        {
+            foreach (var rightValue in rightValues)
+            {
+                if (CompareDynamicValues(leftValue, rightValue, filterNode.Operator))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static List<object?> ApplyRuntimeWildcard(IEnumerable<object?> values)
+    {
+        var results = new List<object?>();
+
+        foreach (var value in values)
+        {
+            results.AddRange(ExpandWildcardValues(value));
+        }
+
+        return results;
+    }
+
+    private static List<object?> ApplyRuntimeRecursive(IEnumerable<object?> values)
+    {
+        var results = new List<object?>();
+
+        foreach (var value in values)
+        {
+            results.Add(value);
+            CollectRuntimeDescendants(value, results);
+        }
+
+        return results;
+    }
+
+    private static void CollectRuntimeDescendants(object? value, List<object?> values)
+    {
+        foreach (var child in ExpandWildcardValues(value))
+        {
+            values.Add(child);
+            CollectRuntimeDescendants(child, values);
+        }
+    }
+
+    private static List<object?> ApplyRuntimeUnion(List<object?> values, UnionNode unionNode)
+    {
+        var results = new List<object?>();
+        foreach (var childPath in unionNode.Nodes)
+        {
+            results.AddRange(EvaluateRuntimeNodes(childPath.Nodes, [.. values]));
+        }
+
+        return results;
+    }
+
+    private static List<object?> ApplyRuntimeIdentifier(IdentifierNode node)
+    {
+        return node.Name switch
+        {
+            "null" => [null],
+            _ => throw new NotSupportedException($"Identifier node '{node.Name}' is not supported.")
+        };
+    }
+
+    private static IEnumerable<object?> ExpandWildcardValues(object? value)
+    {
+        if (value is null)
+        {
+            yield break;
+        }
+
+        if (value is JsonDocument document)
+        {
+            foreach (var item in ExpandWildcardValues(document.RootElement))
+            {
+                yield return item;
+            }
+
+            yield break;
+        }
+
+        if (value is JsonElement element)
+        {
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var property in element.EnumerateObject())
+                {
+                    yield return ConvertJsonElementValue(property.Value);
+                }
+            }
+            else if (element.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in element.EnumerateArray())
+                {
+                    yield return ConvertJsonElementValue(item);
+                }
+            }
+
+            yield break;
+        }
+
+        if (value is JsonArray jsonArray)
+        {
+            foreach (var item in jsonArray)
+            {
+                yield return ConvertJsonNodeValue(item);
+            }
+
+            yield break;
+        }
+
+        if (value is JsonObject jsonObject)
+        {
+            foreach (var property in jsonObject)
+            {
+                yield return ConvertJsonNodeValue(property.Value);
+            }
+
+            yield break;
+        }
+
+        if (value is JsonNode)
+        {
+            yield break;
+        }
+
+        if (value is IDictionary dictionary)
+        {
+            foreach (DictionaryEntry entry in dictionary)
+            {
+                yield return entry.Value;
+            }
+
+            yield break;
+        }
+
+        if (value is IEnumerable enumerable and not string)
+        {
+            foreach (var item in enumerable)
+            {
+                yield return item;
+            }
+
+            yield break;
+        }
+
+        var valueType = value.GetType();
+        if (IsSimpleRuntimeType(valueType))
+        {
+            yield break;
+        }
+
+        foreach (var property in valueType.GetProperties(BindingFlags.Instance | BindingFlags.Public)
+                     .Where(x => x.GetIndexParameters().Length == 0)
+                     .OrderBy(x => x.MetadataToken))
+        {
+            yield return property.GetValue(value);
+        }
+
+        foreach (var field in valueType.GetFields(BindingFlags.Instance | BindingFlags.Public).OrderBy(x => x.MetadataToken))
+        {
+            yield return field.GetValue(value);
+        }
+    }
+
+    private static bool IsSimpleRuntimeType(Type type)
+    {
+        var coreType = Nullable.GetUnderlyingType(type) ?? type;
+        return coreType.IsPrimitive ||
+               coreType.IsEnum ||
+               coreType == typeof(string) ||
+               coreType == typeof(decimal) ||
+               coreType == typeof(DateTime) ||
+               coreType == typeof(DateTimeOffset) ||
+               coreType == typeof(Guid) ||
+               coreType == typeof(TimeSpan);
+    }
+
+    private static object? CollapseRuntimeResults(List<object?> values)
+    {
+        if (values.Count == 0)
+        {
+            return null;
+        }
+
+        if (values.Count == 1)
+        {
+            return NormalizeRuntimeResult(values[0]);
+        }
+
+        return values.Select(NormalizeRuntimeResult).ToArray();
+    }
+
+    private static object? NormalizeRuntimeResult(object? value)
+    {
+        return value switch
+        {
+            JsonDocument document => GetJsonDocumentValueOrSelf(document),
+            JsonElement element => GetJsonElementValueOrSelf(element),
+            JsonNode node => GetJsonNodeValueOrSelf(node),
+            _ => value
         };
     }
 
