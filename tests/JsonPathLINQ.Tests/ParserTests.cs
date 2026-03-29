@@ -219,7 +219,7 @@ public sealed class ParserTests
     [MemberData(nameof(ParserCases))]
     public void ParserCasesFromClientGo(ParserTestCase testCase)
     {
-        LegacyJsonPathAdapter? parser = null;
+        LegacyJsonPathParser? parser = null;
         Exception? error = null;
 
         try
