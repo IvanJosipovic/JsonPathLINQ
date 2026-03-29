@@ -1,5 +1,8 @@
 using System.Collections;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using System.Reflection;
 using ExpressionTreeToString;
 using JsonPathLINQ;
 using Shouldly;
@@ -543,6 +546,163 @@ public sealed class JsonPathTests
         Assert.Equal("x", result.ToString());
     }
 
+    [Fact]
+    public void EvaluateRuntimePathSupportsFilterAndExistsSemantics()
+    {
+        var source = new object?[]
+        {
+            new Dictionary<string, object?> { ["id"] = 1, ["name"] = "one", ["flag"] = null },
+            new Dictionary<string, object?> { ["id"] = 2, ["name"] = "two", ["flag"] = true },
+            new Dictionary<string, object?> { ["id"] = 3, ["name"] = "three" },
+        };
+
+        var equalityFilter = new FilterNode(
+            new ListNode { Nodes = { new FieldNode("id") } },
+            new ListNode { Nodes = { new IntNode(2) } },
+            "==");
+
+        var equalityPath = new ListNode();
+        equalityPath.Append(equalityFilter);
+        equalityPath.Append(new FieldNode("name"));
+
+        JsonPath.EvaluateRuntimePath(equalityPath, source).ShouldBe("two");
+
+        var existsFilter = new FilterNode(
+            new ListNode { Nodes = { new FieldNode("flag") } },
+            new ListNode(),
+            "exists");
+
+        var existsPath = new ListNode();
+        existsPath.Append(existsFilter);
+        existsPath.Append(new FieldNode("id"));
+
+        JsonPath.EvaluateRuntimePath(existsPath, source).ShouldBe(1);
+    }
+
+    [Fact]
+    public void EvaluateRuntimePathSupportsJsonAndClrFieldLookupShapes()
+    {
+        using var jsonDocument = JsonDocument.Parse("""{ "Name": "doc", "Items": [1, 2], "Scalar": 5 }""");
+        JsonPath.EvaluateRuntimePath(new FieldNode("name"), jsonDocument).ShouldBe("doc");
+
+        var jsonElement = JsonDocument.Parse("""{ "Name": "element" }""").RootElement.Clone();
+        JsonPath.EvaluateRuntimePath(new FieldNode("name"), jsonElement).ShouldBe("element");
+
+        var jsonNode = JsonNode.Parse("""{ "Name": "node" }""");
+        JsonPath.EvaluateRuntimePath(new FieldNode("name"), jsonNode).ShouldBe("node");
+
+        var dict = new Hashtable { ["Name"] = "dictionary" };
+        JsonPath.EvaluateRuntimePath(new FieldNode("Name"), dict).ShouldBe("dictionary");
+
+        JsonPath.EvaluateRuntimePath(new FieldNode("renamed"), new RenamedPropertyHost { ActualName = "renamed-value" }).ShouldBe("renamed-value");
+        JsonPath.EvaluateRuntimePath(new FieldNode("Count"), new FieldHost { Count = 9 }).ShouldBe(9);
+        JsonPath.EvaluateRuntimePath(new FieldNode("missing"), new NoMatchHost()).ShouldBeNull();
+        JsonPath.EvaluateRuntimePath(new FieldNode("missing"), null).ShouldBeNull();
+    }
+
+    [Fact]
+    public void EvaluateRuntimePathSupportsArrayEnumerationAcrossSupportedInputs()
+    {
+        var allItems = new ArrayNode([new ParamsEntry(false, 0, false), new ParamsEntry(false, 0, false), new ParamsEntry(false, 0, false)]);
+        var lastItem = new ArrayNode([new ParamsEntry(true, -1, false), new ParamsEntry(true, 0, true), new ParamsEntry(false, 0, false)]);
+        var everyOther = new ArrayNode([new ParamsEntry(false, 0, false), new ParamsEntry(false, 0, false), new ParamsEntry(true, 2, false)]);
+
+        using var document = JsonDocument.Parse("""["a","b","c"]""");
+        JsonPath.EvaluateRuntimePath(lastItem, document).ShouldBe("c");
+
+        var element = JsonDocument.Parse("""["x","y","z"]""").RootElement.Clone();
+        JsonPath.EvaluateRuntimePath(lastItem, element).ShouldBe("z");
+
+        var jsonArray = JsonNode.Parse("""["j0","j1","j2"]""")!.AsArray();
+        JsonPath.EvaluateRuntimePath(everyOther, jsonArray).ShouldBe(new object?[] { "j0", "j2" });
+
+        JsonPath.EvaluateRuntimePath(everyOther, new[] { 1, 2, 3, 4 }).ShouldBe(new object?[] { 1, 3 });
+        JsonPath.EvaluateRuntimePath(allItems, null).ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData("\"text\"")]
+    [InlineData("{\"a\":1}")]
+    public void EvaluateRuntimePathRejectsRuntimeArrayEnumerationForNonArrays(string json)
+    {
+        var node = new ArrayNode([new ParamsEntry(false, 0, false), new ParamsEntry(false, 0, false), new ParamsEntry(false, 0, false)]);
+        var jsonNode = JsonNode.Parse(json)!;
+
+        Assert.Throws<NotSupportedException>(() => JsonPath.EvaluateRuntimePath(node, jsonNode));
+    }
+
+    [Fact]
+    public void EvaluateRuntimePathRejectsInvalidRuntimeArrayOperations()
+    {
+        var source = new[] { 1, 2, 3 };
+
+        var outOfRange = new ArrayNode([new ParamsEntry(true, 5, false), new ParamsEntry(true, 0, true), new ParamsEntry(false, 0, false)]);
+        Assert.Throws<ArgumentOutOfRangeException>(() => JsonPath.EvaluateRuntimePath(outOfRange, source));
+
+        var badStep = new ArrayNode([new ParamsEntry(false, 0, false), new ParamsEntry(false, 0, false), new ParamsEntry(true, 0, false)]);
+        Assert.Throws<NotSupportedException>(() => JsonPath.EvaluateRuntimePath(badStep, source));
+
+        var badRange = new ArrayNode([new ParamsEntry(true, 2, false), new ParamsEntry(true, 1, false), new ParamsEntry(false, 0, false)]);
+        Assert.Throws<NotSupportedException>(() => JsonPath.EvaluateRuntimePath(badRange, source));
+    }
+
+    [Fact]
+    public void EvaluateRuntimePathSupportsWildcardAcrossJsonAndClrShapes()
+    {
+        using var document = JsonDocument.Parse("""{ "a": 1, "b": 2 }""");
+        JsonPath.EvaluateRuntimePath(new WildcardNode(), document).ShouldBe(new object?[] { 1, 2 });
+
+        var jsonArray = JsonNode.Parse("""["n1","n2"]""")!.AsArray();
+        JsonPath.EvaluateRuntimePath(new WildcardNode(), jsonArray).ShouldBe(new object?[] { "n1", "n2" });
+
+        var scalarNode = JsonNode.Parse("5");
+        JsonPath.EvaluateRuntimePath(new WildcardNode(), scalarNode).ShouldBeNull();
+
+        var values = new Dictionary<string, string> { ["a"] = "one", ["b"] = "two" };
+        JsonPath.EvaluateRuntimePath(new WildcardNode(), values).ShouldBe(new object?[] { "one", "two" });
+
+        JsonPath.EvaluateRuntimePath(new WildcardNode(), new RuntimeWildcardHost { Name = "host", Count = 4 })
+            .ShouldBe(new object?[] { "host", 4 });
+    }
+
+    [Fact]
+    public void EvaluateRuntimePathSupportsJsonScalarNormalizationAndIdentifiers()
+    {
+        using var document = JsonDocument.Parse("5");
+        JsonPath.EvaluateRuntimePath(new FieldNode("missing"), document).ShouldBeNull();
+        JsonPath.EvaluateRuntimePath(new IdentifierNode("null"), new object()).ShouldBeNull();
+        Assert.Throws<NotSupportedException>(() => JsonPath.EvaluateRuntimePath(new IdentifierNode("missing"), new object()));
+
+        var union = new UnionNode(
+        [
+            new ListNode { Nodes = { new IntNode(1) } },
+            new ListNode { Nodes = { new FloatNode(2.5) } },
+            new ListNode { Nodes = { new BoolNode(true) } },
+        ]);
+
+        JsonPath.EvaluateRuntimePath(union, new object()).ShouldBe(new object?[] { 1, 2.5d, true });
+    }
+
+    [Fact]
+    public void GenerateSupportsNodeTypesAndHelpersNotOtherwiseExercised()
+    {
+        Assert.Equal(NodeType.Float, new FloatNode(1.25).Type);
+        Assert.Equal("Float: 1.25", new FloatNode(1.25).ToString());
+        Assert.Equal(NodeType.Bool, new BoolNode(true).Type);
+        Assert.Equal("Bool: True", new BoolNode(true).ToString());
+
+        var parameter = Expression.Parameter(typeof(JsonNode), "node");
+        var normalizedNode = typeof(JsonPath)
+            .GetMethod("NormalizeTerminalExpression", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, [parameter]) as Expression;
+        Assert.NotNull(normalizedNode);
+        Assert.Equal(typeof(object), normalizedNode!.Type);
+
+        var getMethod = typeof(JsonPath)
+            .GetMethod("GetMethod", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        Assert.ThrowsAny<TargetInvocationException>(() => getMethod.Invoke(null, ["Nope"]));
+    }
+
     private static string Exp(Expression<Func<ExpressionTestObject, object>> exp) => exp.ToString();
 
     private static Expression<Func<ExpressionTestObject, object>> Exp2(Expression<Func<ExpressionTestObject, object>> exp) => exp;
@@ -675,5 +835,12 @@ public sealed class JsonPathTests
         public IEnumerator<object?> GetEnumerator() => ((IEnumerable<object?>)values).GetEnumerator();
 
         IEnumerator IEnumerable.GetEnumerator() => values.GetEnumerator();
+    }
+
+    private sealed class RuntimeWildcardHost
+    {
+        public string Name { get; init; } = string.Empty;
+
+        public int Count;
     }
 }
