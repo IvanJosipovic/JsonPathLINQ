@@ -28,15 +28,3 @@ var compiled = exp.Compile();
 
 var result = compiled.Invoke(new TestObject());
 ```
-
-## Supported Operations
-
-- Property Access
-  - Examples
-    - ".property"
-    - ".property.subProperty"
-- Filter
-  - Examples
-    - ".list[?(@.Type==\"1\")].Status"
-  - Operators
-    - Equals (==)

@@ -3,12 +3,7 @@
   "enabled": true,
   "timezone": "America/Vancouver",
   "dependencyDashboard": true,
-  "dependencyDashboardTitle": "Renovate Dashboard",
   "semanticCommits": "enabled",
-  "suppressNotifications": [
-    "prIgnoreNotification"
-  ],
-  "rebaseWhen": "conflicted",
   "assignees": [
     "@ivanjosipovic"
   ],
@@ -16,17 +11,33 @@
     "config:recommended"
   ],
   "platformAutomerge": true,
+  "ignorePaths": [
+    "**/docs/**"
+  ],
   "packageRules": [
     {
-      "automerge": true,
       "matchUpdateTypes": [
         "minor",
         "patch",
         "digest"
       ],
-      "matchCurrentVersion": "!/^0/",
+      "automerge": true,
       "matchFileNames": [
-        "src/JsonPathLINQ.Tests/JsonPathLINQ.Tests.csproj"
+        "tests/**",
+        "benchmarks/**"
+      ]
+    },
+    {
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "automerge": false,
+      "semanticCommitType": "fix",
+      "matchFileNames": [
+        "src/**",
+        "global.json"
       ]
     }
   ]
