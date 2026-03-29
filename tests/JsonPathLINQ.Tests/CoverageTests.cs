@@ -10,14 +10,14 @@ public class CoverageTests
     [Fact]
     public void GetExpressionRejectsMultipleRootActions()
     {
-        var exception = Assert.Throws<NotSupportedException>(() => JsonPathLINQ.GetExpression<SimpleHost>("{.Name}{.Count}"));
+        var exception = Assert.Throws<NotSupportedException>(() => JsonPath.GetExpression<SimpleHost>("{.Name}{.Count}"));
         Assert.Contains("single root action", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void GetExpressionConvertsResultToRequestedReturnType()
     {
-        var expression = JsonPathLINQ.GetExpression<ArrayHost, double>(".Numbers[1]");
+        var expression = JsonPath.GetExpression<ArrayHost, double>(".Numbers[1]");
         var result = expression.Compile()(new ArrayHost { Numbers = [3, 5, 7] });
 
         Assert.Equal(5d, result);
@@ -26,14 +26,14 @@ public class CoverageTests
     [Fact]
     public void GenerateRejectsNullNode()
     {
-        Assert.Throws<ArgumentNullException>(() => JsonPathLINQ.Generate(null!));
+        Assert.Throws<ArgumentNullException>(() => JsonPath.Generate(null!));
     }
 
     [Theory]
     [MemberData(nameof(GetUnsupportedNodeCases))]
     public void GenerateRejectsUnsupportedNodes(INode node, string messageFragment)
     {
-        var exception = Assert.Throws<NotSupportedException>(() => JsonPathLINQ.Generate(node));
+        var exception = Assert.Throws<NotSupportedException>(() => JsonPath.Generate(node));
         Assert.Contains(messageFragment, exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -51,24 +51,24 @@ public class CoverageTests
     [Fact]
     public void GenerateSupportsScalarNodes()
     {
-        Assert.Equal("hello", Expression.Lambda<Func<string>>(JsonPathLINQ.Generate(new TextNode("hello"))).Compile()());
-        Assert.True(Expression.Lambda<Func<bool>>(JsonPathLINQ.Generate(new BoolNode(true))).Compile()());
-        Assert.Equal(12, Expression.Lambda<Func<int>>(JsonPathLINQ.Generate(new IntNode(12))).Compile()());
-        Assert.Equal(2.5d, Expression.Lambda<Func<double>>(JsonPathLINQ.Generate(new FloatNode(2.5))).Compile()());
-        Assert.Null(Expression.Lambda<Func<object?>>(Expression.Convert(JsonPathLINQ.Generate(new IdentifierNode("null")), typeof(object))).Compile()());
+        Assert.Equal("hello", Expression.Lambda<Func<string>>(JsonPath.Generate(new TextNode("hello"))).Compile()());
+        Assert.True(Expression.Lambda<Func<bool>>(JsonPath.Generate(new BoolNode(true))).Compile()());
+        Assert.Equal(12, Expression.Lambda<Func<int>>(JsonPath.Generate(new IntNode(12))).Compile()());
+        Assert.Equal(2.5d, Expression.Lambda<Func<double>>(JsonPath.Generate(new FloatNode(2.5))).Compile()());
+        Assert.Null(Expression.Lambda<Func<object?>>(Expression.Convert(JsonPath.Generate(new IdentifierNode("null")), typeof(object))).Compile()());
     }
 
     [Fact]
     public void GenerateThrowsForMissingFieldOnTypedSource()
     {
-        var exception = Assert.Throws<NotSupportedException>(() => JsonPathLINQ.GetExpression<SimpleHost>(".Missing"));
+        var exception = Assert.Throws<NotSupportedException>(() => JsonPath.GetExpression<SimpleHost>(".Missing"));
         Assert.Contains("was not found", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void GenerateCanReadFieldBackedMember()
     {
-        var expression = JsonPathLINQ.GetExpression<FieldHost, int>(".Count");
+        var expression = JsonPath.GetExpression<FieldHost, int>(".Count");
         var result = expression.Compile()(new FieldHost { Count = 42 });
 
         Assert.Equal(42, result);
@@ -77,7 +77,7 @@ public class CoverageTests
     [Fact]
     public void GenerateCanReadLateBoundMemberThroughJsonPropertyName()
     {
-        var expression = JsonPathLINQ.GetExpression<object>(".renamed");
+        var expression = JsonPath.GetExpression<object>(".renamed");
         var result = expression.Compile()(new RenamedPropertyHost { ActualName = "value" });
 
         Assert.Equal("value", result);
@@ -86,7 +86,7 @@ public class CoverageTests
     [Fact]
     public void GenerateCanReadGenericDictionaryWithConvertedKey()
     {
-        var expression = JsonPathLINQ.GetExpression<Dictionary<int, string>, string>("['42']");
+        var expression = JsonPath.GetExpression<Dictionary<int, string>, string>("['42']");
         var result = expression.Compile()(new Dictionary<int, string> { [42] = "answer" });
 
         Assert.Equal("answer", result);
@@ -95,7 +95,7 @@ public class CoverageTests
     [Fact]
     public void GenerateCanReadGenericDictionaryInterfaceWithConvertedKey()
     {
-        var expression = JsonPathLINQ.GetExpression<IDictionary<int, string>, string>("['7']");
+        var expression = JsonPath.GetExpression<IDictionary<int, string>, string>("['7']");
         var result = expression.Compile()(new Dictionary<int, string> { [7] = "seven" });
 
         Assert.Equal("seven", result);
@@ -104,7 +104,7 @@ public class CoverageTests
     [Fact]
     public void GenerateFallsBackForUnconvertibleGenericDictionaryKey()
     {
-        var expression = JsonPathLINQ.GetExpression<Dictionary<int, string>>("['nope']");
+        var expression = JsonPath.GetExpression<Dictionary<int, string>>("['nope']");
         var compiled = expression.Compile();
 
         Assert.Null(compiled(new Dictionary<int, string> { [1] = "one" }));
@@ -115,7 +115,7 @@ public class CoverageTests
     [InlineData(".Name[-1]", "Negative indexes")]
     public void GenerateRejectsUnsupportedArrayOperations(string jsonPath, string messageFragment)
     {
-        var exception = Assert.Throws<NotSupportedException>(() => JsonPathLINQ.GetExpression<SimpleHost>(jsonPath));
+        var exception = Assert.Throws<NotSupportedException>(() => JsonPath.GetExpression<SimpleHost>(jsonPath));
         Assert.Contains(messageFragment, exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -123,7 +123,7 @@ public class CoverageTests
     public void GenerateRejectsArrayParametersWithUnexpectedLength()
     {
         var exception = Assert.Throws<NotSupportedException>(() =>
-            JsonPathLINQ.GenerateArray(
+            JsonPath.GenerateArray(
                 new ArrayNode([new ParamsEntry(true, 1, false)]),
                 Expression.Parameter(typeof(int[]), "x")));
 
@@ -133,7 +133,7 @@ public class CoverageTests
     [Fact]
     public void GenerateCanIndexIntoTypedEnumerable()
     {
-        var expression = JsonPathLINQ.GetExpression<ArrayHost, string>(".Names[2]");
+        var expression = JsonPath.GetExpression<ArrayHost, string>(".Names[2]");
         var result = expression.Compile()(new ArrayHost { Names = ["a", "b", "c"] });
 
         Assert.Equal("c", result);
@@ -142,21 +142,21 @@ public class CoverageTests
     [Fact]
     public void GenerateRejectsArrayIndexingNonEnumerableSource()
     {
-        var exception = Assert.Throws<NotSupportedException>(() => JsonPathLINQ.GetExpression<SimpleHost>(".Count[0]"));
+        var exception = Assert.Throws<NotSupportedException>(() => JsonPath.GetExpression<SimpleHost>(".Count[0]"));
         Assert.Contains("is not enumerable", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void GenerateFilterRejectsNonEnumerableTypedSource()
     {
-        var exception = Assert.Throws<NotSupportedException>(() => JsonPathLINQ.GetExpression<SimpleHost>(".Name[?(@==\"a\")]"));
+        var exception = Assert.Throws<NotSupportedException>(() => JsonPath.GetExpression<SimpleHost>(".Name[?(@==\"a\")]"));
         Assert.Contains("cannot be filtered", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void GenerateFilterExistsTreatsNonNullableValuesAsPresent()
     {
-        var expression = JsonPathLINQ.GetExpression<FilterExistsHost, int>(".Items[?(@.Id)].Id");
+        var expression = JsonPath.GetExpression<FilterExistsHost, int>(".Items[?(@.Id)].Id");
         var result = expression.Compile()(new FilterExistsHost
         {
             Items =
@@ -172,7 +172,7 @@ public class CoverageTests
     [Fact]
     public void GenerateFilterSupportsJsonDocumentSource()
     {
-        var expression = JsonPathLINQ.GetExpression<DocumentFilterHost, string>(".Document[?(@.ready==true)].name");
+        var expression = JsonPath.GetExpression<DocumentFilterHost, string>(".Document[?(@.ready==true)].name");
         var result = expression.Compile()(new DocumentFilterHost
         {
             Document = JsonDocument.Parse("""
@@ -189,21 +189,21 @@ public class CoverageTests
     [Fact]
     public void GenerateFilterRejectsUnknownOperator()
     {
-        var exception = Assert.Throws<NotSupportedException>(() => JsonPathLINQ.GetExpression<FilterExistsHost>(".Items[?(@.Id<>1)]"));
+        var exception = Assert.Throws<NotSupportedException>(() => JsonPath.GetExpression<FilterExistsHost>(".Items[?(@.Id<>1)]"));
         Assert.Contains("Filter operator", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void CreateNullChecksRejectsNullExpression()
     {
-        Assert.Throws<ArgumentNullException>(() => JsonPathLINQ.CreateNullChecks(null!));
+        Assert.Throws<ArgumentNullException>(() => JsonPath.CreateNullChecks(null!));
     }
 
     [Fact]
     public void CreateNullChecksLeavesValueTypeExpressionUnchanged()
     {
         Expression<Func<SimpleHost, int>> source = x => x.Count;
-        var result = JsonPathLINQ.CreateNullChecks(source.Body);
+        var result = JsonPath.CreateNullChecks(source.Body);
 
         Assert.Equal(source.Body.ToString(), result.ToString());
     }
@@ -267,93 +267,93 @@ public class CoverageTests
         var arrayElement = JsonDocument.Parse("[7,8]").RootElement.Clone();
         var customEnumerable = new CustomEnumerable("a", "b", "c");
 
-        Assert.Null(JsonPathLINQ.GetLateBoundMember(null, "Value"));
-        Assert.Equal(7, JsonPathLINQ.GetLateBoundMember(objectDocument, "Value"));
-        Assert.Equal(7, JsonPathLINQ.GetLateBoundMember(element, "value"));
-        Assert.Equal(9, JsonPathLINQ.GetLateBoundMember(node, "value"));
-        Assert.Equal("yes", JsonPathLINQ.GetLateBoundMember(new Hashtable { ["flag"] = "yes" }, "flag"));
-        Assert.Null(JsonPathLINQ.GetLateBoundMember(new Hashtable(), "missing"));
-        Assert.Equal("name", JsonPathLINQ.GetLateBoundMember(new SimpleHost { Name = "name" }, "Name"));
-        Assert.Equal(11, JsonPathLINQ.GetLateBoundMember(new FieldHost { Count = 11 }, "Count"));
-        Assert.Equal("renamed", JsonPathLINQ.GetLateBoundMember(new RenamedPropertyHost { ActualName = "renamed" }, "renamed"));
+        Assert.Null(JsonPath.GetLateBoundMember(null, "Value"));
+        Assert.Equal(7, JsonPath.GetLateBoundMember(objectDocument, "Value"));
+        Assert.Equal(7, JsonPath.GetLateBoundMember(element, "value"));
+        Assert.Equal(9, JsonPath.GetLateBoundMember(node, "value"));
+        Assert.Equal("yes", JsonPath.GetLateBoundMember(new Hashtable { ["flag"] = "yes" }, "flag"));
+        Assert.Null(JsonPath.GetLateBoundMember(new Hashtable(), "missing"));
+        Assert.Equal("name", JsonPath.GetLateBoundMember(new SimpleHost { Name = "name" }, "Name"));
+        Assert.Equal(11, JsonPath.GetLateBoundMember(new FieldHost { Count = 11 }, "Count"));
+        Assert.Equal("renamed", JsonPath.GetLateBoundMember(new RenamedPropertyHost { ActualName = "renamed" }, "renamed"));
 
-        Assert.Null(JsonPathLINQ.GetJsonElementProperty(default, "x"));
-        Assert.Equal(7, JsonPathLINQ.GetJsonElementProperty(element, "value"));
-        Assert.Null(JsonPathLINQ.GetJsonElementProperty(element, "missing"));
-        Assert.Null(JsonPathLINQ.GetJsonNodeProperty(JsonValue.Create(1), "x"));
-        Assert.Equal(9, JsonPathLINQ.GetJsonNodeProperty(node, "VALUE"));
-        Assert.Null(JsonPathLINQ.GetJsonNodeProperty(node, "missing"));
+        Assert.Null(JsonPath.GetJsonElementProperty(default, "x"));
+        Assert.Equal(7, JsonPath.GetJsonElementProperty(element, "value"));
+        Assert.Null(JsonPath.GetJsonElementProperty(element, "missing"));
+        Assert.Null(JsonPath.GetJsonNodeProperty(JsonValue.Create(1), "x"));
+        Assert.Equal(9, JsonPath.GetJsonNodeProperty(node, "VALUE"));
+        Assert.Null(JsonPath.GetJsonNodeProperty(node, "missing"));
 
-        Assert.Null(JsonPathLINQ.GetDynamicArrayIndex(null, 0));
-        Assert.Equal(1, JsonPathLINQ.GetDynamicArrayIndex(document, 0));
-        Assert.Equal(8, JsonPathLINQ.GetDynamicArrayIndex(arrayElement, 1));
-        Assert.Equal(6, JsonPathLINQ.GetDynamicArrayIndex(arrayNode.AsArray(), 1));
-        Assert.Equal(6, JsonPathLINQ.GetDynamicArrayIndex(arrayNode, 1));
-        Assert.Equal("b", JsonPathLINQ.GetDynamicArrayIndex(customEnumerable, 1));
-        Assert.ThrowsAny<ArgumentOutOfRangeException>(() => JsonPathLINQ.GetDynamicArrayIndex(arrayNode, 3));
-        Assert.ThrowsAny<ArgumentOutOfRangeException>(() => JsonPathLINQ.GetDynamicArrayIndex(customEnumerable, 5));
-        Assert.ThrowsAny<NotSupportedException>(() => JsonPathLINQ.GetDynamicArrayIndex(element, 0));
-        Assert.ThrowsAny<NotSupportedException>(() => JsonPathLINQ.GetDynamicArrayIndex(JsonNode.Parse("""{ "x": 1 }""")!, 0));
-        Assert.ThrowsAny<NotSupportedException>(() => JsonPathLINQ.GetDynamicArrayIndex("abc", 0));
-        Assert.ThrowsAny<NotSupportedException>(() => JsonPathLINQ.GetDynamicArrayIndex(new Hashtable(), 0));
+        Assert.Null(JsonPath.GetDynamicArrayIndex(null, 0));
+        Assert.Equal(1, JsonPath.GetDynamicArrayIndex(document, 0));
+        Assert.Equal(8, JsonPath.GetDynamicArrayIndex(arrayElement, 1));
+        Assert.Equal(6, JsonPath.GetDynamicArrayIndex(arrayNode.AsArray(), 1));
+        Assert.Equal(6, JsonPath.GetDynamicArrayIndex(arrayNode, 1));
+        Assert.Equal("b", JsonPath.GetDynamicArrayIndex(customEnumerable, 1));
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(() => JsonPath.GetDynamicArrayIndex(arrayNode, 3));
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(() => JsonPath.GetDynamicArrayIndex(customEnumerable, 5));
+        Assert.ThrowsAny<NotSupportedException>(() => JsonPath.GetDynamicArrayIndex(element, 0));
+        Assert.ThrowsAny<NotSupportedException>(() => JsonPath.GetDynamicArrayIndex(JsonNode.Parse("""{ "x": 1 }""")!, 0));
+        Assert.ThrowsAny<NotSupportedException>(() => JsonPath.GetDynamicArrayIndex("abc", 0));
+        Assert.ThrowsAny<NotSupportedException>(() => JsonPath.GetDynamicArrayIndex(new Hashtable(), 0));
 
-        Assert.Empty(ToList(JsonPathLINQ.EnumerateDynamic(null)));
-        Assert.Equal([1, 2], ToList(JsonPathLINQ.EnumerateDynamic(document)));
-        Assert.Equal([7, 8], ToList(JsonPathLINQ.EnumerateDynamic(arrayElement)));
-        Assert.Equal([5, 6], ToList(JsonPathLINQ.EnumerateDynamic(arrayNode.AsArray())));
-        Assert.Equal([5, 6], ToList(JsonPathLINQ.EnumerateDynamic(arrayNode)));
-        Assert.Equal(["a", "b", "c"], ToList(JsonPathLINQ.EnumerateDynamic(customEnumerable)));
-        Assert.ThrowsAny<NotSupportedException>(() => ToList(JsonPathLINQ.EnumerateDynamic(element)));
-        Assert.ThrowsAny<NotSupportedException>(() => ToList(JsonPathLINQ.EnumerateDynamic(JsonNode.Parse("""{ "x": 1 }""")!)));
-        Assert.ThrowsAny<NotSupportedException>(() => ToList(JsonPathLINQ.EnumerateDynamic("abc")));
-        Assert.ThrowsAny<NotSupportedException>(() => ToList(JsonPathLINQ.EnumerateDynamic(new Hashtable())));
+        Assert.Empty(ToList(JsonPath.EnumerateDynamic(null)));
+        Assert.Equal([1, 2], ToList(JsonPath.EnumerateDynamic(document)));
+        Assert.Equal([7, 8], ToList(JsonPath.EnumerateDynamic(arrayElement)));
+        Assert.Equal([5, 6], ToList(JsonPath.EnumerateDynamic(arrayNode.AsArray())));
+        Assert.Equal([5, 6], ToList(JsonPath.EnumerateDynamic(arrayNode)));
+        Assert.Equal(["a", "b", "c"], ToList(JsonPath.EnumerateDynamic(customEnumerable)));
+        Assert.ThrowsAny<NotSupportedException>(() => ToList(JsonPath.EnumerateDynamic(element)));
+        Assert.ThrowsAny<NotSupportedException>(() => ToList(JsonPath.EnumerateDynamic(JsonNode.Parse("""{ "x": 1 }""")!)));
+        Assert.ThrowsAny<NotSupportedException>(() => ToList(JsonPath.EnumerateDynamic("abc")));
+        Assert.ThrowsAny<NotSupportedException>(() => ToList(JsonPath.EnumerateDynamic(new Hashtable())));
 
-        Assert.True(JsonPathLINQ.CompareDynamicValues(JsonDocument.Parse("1"), JsonNode.Parse("1"), "=="));
-        Assert.True(JsonPathLINQ.CompareDynamicValues(2, 1, ">"));
-        Assert.True(JsonPathLINQ.CompareDynamicValues(2, 3, "<="));
-        Assert.True(JsonPathLINQ.CompareDynamicValues(true, false, "!="));
-        Assert.ThrowsAny<NotSupportedException>(() => JsonPathLINQ.CompareDynamicValues(1, 1, "<>"));
+        Assert.True(JsonPath.CompareDynamicValues(JsonDocument.Parse("1"), JsonNode.Parse("1"), "=="));
+        Assert.True(JsonPath.CompareDynamicValues(2, 1, ">"));
+        Assert.True(JsonPath.CompareDynamicValues(2, 3, "<="));
+        Assert.True(JsonPath.CompareDynamicValues(true, false, "!="));
+        Assert.ThrowsAny<NotSupportedException>(() => JsonPath.CompareDynamicValues(1, 1, "<>"));
 
-        Assert.Null(JsonPathLINQ.GetJsonDocumentValueOrSelf(null));
-        Assert.Equal("text", JsonPathLINQ.GetJsonElementValueOrSelf(JsonDocument.Parse("\"text\"").RootElement.Clone()));
-        Assert.Equal(42, JsonPathLINQ.GetJsonDocumentValueOrSelf(JsonDocument.Parse("42")));
-        Assert.Equal("node", JsonPathLINQ.GetJsonNodeValueOrSelf(JsonValue.Create("node")));
+        Assert.Null(JsonPath.GetJsonDocumentValueOrSelf(null));
+        Assert.Equal("text", JsonPath.GetJsonElementValueOrSelf(JsonDocument.Parse("\"text\"").RootElement.Clone()));
+        Assert.Equal(42, JsonPath.GetJsonDocumentValueOrSelf(JsonDocument.Parse("42")));
+        Assert.Equal("node", JsonPath.GetJsonNodeValueOrSelf(JsonValue.Create("node")));
 
-        Assert.True((bool)JsonPathLINQ.ConvertJsonElementValue(JsonDocument.Parse("true").RootElement.Clone())!);
-        Assert.False((bool)JsonPathLINQ.ConvertJsonElementValue(JsonDocument.Parse("false").RootElement.Clone())!);
-        Assert.Null(JsonPathLINQ.ConvertJsonElementValue(JsonDocument.Parse("null").RootElement.Clone()));
-        Assert.Null(JsonPathLINQ.ConvertJsonElementValue(default));
-        Assert.Equal(1, JsonPathLINQ.ConvertJsonElementValue(JsonDocument.Parse("1").RootElement.Clone()));
-        Assert.IsType<JsonElement>(JsonPathLINQ.ConvertJsonElementValue(JsonDocument.Parse("{\"x\":1}").RootElement.Clone()));
+        Assert.True((bool)JsonPath.ConvertJsonElementValue(JsonDocument.Parse("true").RootElement.Clone())!);
+        Assert.False((bool)JsonPath.ConvertJsonElementValue(JsonDocument.Parse("false").RootElement.Clone())!);
+        Assert.Null(JsonPath.ConvertJsonElementValue(JsonDocument.Parse("null").RootElement.Clone()));
+        Assert.Null(JsonPath.ConvertJsonElementValue(default));
+        Assert.Equal(1, JsonPath.ConvertJsonElementValue(JsonDocument.Parse("1").RootElement.Clone()));
+        Assert.IsType<JsonElement>(JsonPath.ConvertJsonElementValue(JsonDocument.Parse("{\"x\":1}").RootElement.Clone()));
 
-        Assert.Null(JsonPathLINQ.ConvertJsonNodeValue(null));
-        Assert.IsType<JsonObject>(JsonPathLINQ.ConvertJsonNodeValue(JsonNode.Parse("""{ "x": 1 }""")));
-        Assert.IsType<JsonArray>(JsonPathLINQ.ConvertJsonNodeValue(JsonNode.Parse("[1,2]")));
-        Assert.Equal("text", JsonPathLINQ.ConvertJsonNodeValue(JsonValue.Create("text")));
-        Assert.True((bool)JsonPathLINQ.ConvertJsonNodeValue(JsonValue.Create(true))!);
-        Assert.Equal(1, JsonPathLINQ.ConvertJsonNodeValue(JsonValue.Create(1)));
-        Assert.Equal(9L, JsonPathLINQ.ConvertJsonNodeValue(JsonValue.Create(9L)));
-        Assert.Equal(2.5m, JsonPathLINQ.ConvertJsonNodeValue(JsonValue.Create(2.5m)));
-        Assert.Equal(3.75d, JsonPathLINQ.ConvertJsonNodeValue(JsonValue.Create(3.75d)));
-        Assert.Equal("\"2024-01-01T00:00:00Z\"", JsonPathLINQ.ConvertJsonNodeValue(JsonValue.Create(new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc))));
+        Assert.Null(JsonPath.ConvertJsonNodeValue(null));
+        Assert.IsType<JsonObject>(JsonPath.ConvertJsonNodeValue(JsonNode.Parse("""{ "x": 1 }""")));
+        Assert.IsType<JsonArray>(JsonPath.ConvertJsonNodeValue(JsonNode.Parse("[1,2]")));
+        Assert.Equal("text", JsonPath.ConvertJsonNodeValue(JsonValue.Create("text")));
+        Assert.True((bool)JsonPath.ConvertJsonNodeValue(JsonValue.Create(true))!);
+        Assert.Equal(1, JsonPath.ConvertJsonNodeValue(JsonValue.Create(1)));
+        Assert.Equal(9L, JsonPath.ConvertJsonNodeValue(JsonValue.Create(9L)));
+        Assert.Equal(2.5m, JsonPath.ConvertJsonNodeValue(JsonValue.Create(2.5m)));
+        Assert.Equal(3.75d, JsonPath.ConvertJsonNodeValue(JsonValue.Create(3.75d)));
+        Assert.Equal("\"2024-01-01T00:00:00Z\"", JsonPath.ConvertJsonNodeValue(JsonValue.Create(new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc))));
 
-        Assert.Equal(1, JsonPathLINQ.NormalizeDynamicValue(JsonDocument.Parse("1")));
-        Assert.Equal("""{ "x": 1 }""", JsonPathLINQ.NormalizeDynamicValue(JsonDocument.Parse("""{ "x": 1 }""").RootElement.Clone()));
-        Assert.Equal("""[1,2]""", JsonPathLINQ.NormalizeDynamicValue(JsonNode.Parse("[1,2]")));
-        Assert.Equal(3, JsonPathLINQ.NormalizeDynamicValue(JsonNode.Parse("3")));
-        Assert.Equal("raw", JsonPathLINQ.NormalizeDynamicValue("raw"));
+        Assert.Equal(1, JsonPath.NormalizeDynamicValue(JsonDocument.Parse("1")));
+        Assert.Equal("""{ "x": 1 }""", JsonPath.NormalizeDynamicValue(JsonDocument.Parse("""{ "x": 1 }""").RootElement.Clone()));
+        Assert.Equal("""[1,2]""", JsonPath.NormalizeDynamicValue(JsonNode.Parse("[1,2]")));
+        Assert.Equal(3, JsonPath.NormalizeDynamicValue(JsonNode.Parse("3")));
+        Assert.Equal("raw", JsonPath.NormalizeDynamicValue("raw"));
 
-        Assert.Equal(1, JsonPathLINQ.TryGetJsonNumber(JsonDocument.Parse("1").RootElement.Clone()));
-        Assert.Equal(2147483648L, JsonPathLINQ.TryGetJsonNumber(JsonDocument.Parse("2147483648").RootElement.Clone()));
-        Assert.Equal(1.5m, JsonPathLINQ.TryGetJsonNumber(JsonDocument.Parse("1.5").RootElement.Clone()));
-        Assert.Equal(double.PositiveInfinity, JsonPathLINQ.TryGetJsonNumber(JsonDocument.Parse("1e400").RootElement.Clone()));
+        Assert.Equal(1, JsonPath.TryGetJsonNumber(JsonDocument.Parse("1").RootElement.Clone()));
+        Assert.Equal(2147483648L, JsonPath.TryGetJsonNumber(JsonDocument.Parse("2147483648").RootElement.Clone()));
+        Assert.Equal(1.5m, JsonPath.TryGetJsonNumber(JsonDocument.Parse("1.5").RootElement.Clone()));
+        Assert.Equal(double.PositiveInfinity, JsonPath.TryGetJsonNumber(JsonDocument.Parse("1e400").RootElement.Clone()));
 
-        Assert.Equal(0, JsonPathLINQ.CompareNormalizedValues(null, null));
-        Assert.Equal(-1, JsonPathLINQ.CompareNormalizedValues(null, 1));
-        Assert.Equal(1, JsonPathLINQ.CompareNormalizedValues(1, null));
-        Assert.Equal(0, JsonPathLINQ.CompareNormalizedValues("1.5", 1.5m));
-        Assert.True(JsonPathLINQ.CompareNormalizedValues(true, false) > 0);
-        Assert.True(JsonPathLINQ.CompareNormalizedValues("abc", "abd") < 0);
+        Assert.Equal(0, JsonPath.CompareNormalizedValues(null, null));
+        Assert.Equal(-1, JsonPath.CompareNormalizedValues(null, 1));
+        Assert.Equal(1, JsonPath.CompareNormalizedValues(1, null));
+        Assert.Equal(0, JsonPath.CompareNormalizedValues("1.5", 1.5m));
+        Assert.True(JsonPath.CompareNormalizedValues(true, false) > 0);
+        Assert.True(JsonPath.CompareNormalizedValues("abc", "abd") < 0);
     }
 
     [Theory]
@@ -371,7 +371,7 @@ public class CoverageTests
     [InlineData("1.5")]
     public void TryConvertToDecimalHandlesSupportedValues(object value)
     {
-        var converted = JsonPathLINQ.TryConvertToDecimal(value, out var result);
+        var converted = JsonPath.TryConvertToDecimal(value, out var result);
 
         Assert.True(converted);
         Assert.NotEqual(default, result);
@@ -380,7 +380,7 @@ public class CoverageTests
     [Fact]
     public void TryConvertToDecimalRejectsUnsupportedValue()
     {
-        var converted = JsonPathLINQ.TryConvertToDecimal(new object(), out var result);
+        var converted = JsonPath.TryConvertToDecimal(new object(), out var result);
 
         Assert.False(converted);
         Assert.Equal(default, result);
@@ -393,21 +393,21 @@ public class CoverageTests
         var nullableRight = Expression.Parameter(typeof(string), "right");
         var nullObject = Expression.Constant(null, typeof(object));
 
-        var rightNullAligned = JsonPathLINQ.AlignComparisonTypes(nullableLeft, nullObject);
+        var rightNullAligned = JsonPath.AlignComparisonTypes(nullableLeft, nullObject);
         Assert.Equal(typeof(string), rightNullAligned.Right.Type);
         Assert.Null(((ConstantExpression)rightNullAligned.Right).Value);
 
-        var leftNullAligned = JsonPathLINQ.AlignComparisonTypes(nullObject, nullableRight);
+        var leftNullAligned = JsonPath.AlignComparisonTypes(nullObject, nullableRight);
         Assert.Equal(typeof(string), leftNullAligned.Left.Type);
         Assert.Null(((ConstantExpression)leftNullAligned.Left).Value);
 
-        var rightConverted = JsonPathLINQ.AlignComparisonTypes(Expression.Parameter(typeof(double), "d"), Expression.Constant(1));
+        var rightConverted = JsonPath.AlignComparisonTypes(Expression.Parameter(typeof(double), "d"), Expression.Constant(1));
         Assert.Equal(typeof(double), rightConverted.Right.Type);
 
-        var leftConverted = JsonPathLINQ.AlignComparisonTypes(Expression.Constant("a"), Expression.Parameter(typeof(object), "o"));
+        var leftConverted = JsonPath.AlignComparisonTypes(Expression.Constant("a"), Expression.Parameter(typeof(object), "o"));
         Assert.Equal(typeof(object), leftConverted.Left.Type);
 
-        var unchanged = JsonPathLINQ.AlignComparisonTypes(Expression.Constant("a"), Expression.Constant(DateTime.UnixEpoch));
+        var unchanged = JsonPath.AlignComparisonTypes(Expression.Constant("a"), Expression.Constant(DateTime.UnixEpoch));
         Assert.Equal(typeof(string), unchanged.Left.Type);
         Assert.Equal(typeof(DateTime), unchanged.Right.Type);
     }
@@ -415,45 +415,45 @@ public class CoverageTests
     [Fact]
     public void BuildFilterComparisonHandlesSupportedOperatorsAndDynamicValues()
     {
-        Assert.IsAssignableFrom<BinaryExpression>(JsonPathLINQ.BuildFilterComparison(Expression.Constant(1), Expression.Constant(1), "=="));
-        Assert.IsAssignableFrom<BinaryExpression>(JsonPathLINQ.BuildFilterComparison(Expression.Constant(1), Expression.Constant(2), "!="));
-        Assert.IsAssignableFrom<BinaryExpression>(JsonPathLINQ.BuildFilterComparison(Expression.Constant(1), Expression.Constant(2), "<"));
-        Assert.IsAssignableFrom<BinaryExpression>(JsonPathLINQ.BuildFilterComparison(Expression.Constant(2), Expression.Constant(1), ">"));
-        Assert.IsAssignableFrom<BinaryExpression>(JsonPathLINQ.BuildFilterComparison(Expression.Constant(1), Expression.Constant(2), "<="));
-        Assert.IsAssignableFrom<BinaryExpression>(JsonPathLINQ.BuildFilterComparison(Expression.Constant(2), Expression.Constant(1), ">="));
-        Assert.IsAssignableFrom<MethodCallExpression>(JsonPathLINQ.BuildFilterComparison(Expression.Parameter(typeof(object), "o"), Expression.Constant(1), "=="));
-        Assert.Throws<NotSupportedException>(() => JsonPathLINQ.BuildFilterComparison(Expression.Constant(1), Expression.Constant(1), "<>"));
+        Assert.IsAssignableFrom<BinaryExpression>(JsonPath.BuildFilterComparison(Expression.Constant(1), Expression.Constant(1), "=="));
+        Assert.IsAssignableFrom<BinaryExpression>(JsonPath.BuildFilterComparison(Expression.Constant(1), Expression.Constant(2), "!="));
+        Assert.IsAssignableFrom<BinaryExpression>(JsonPath.BuildFilterComparison(Expression.Constant(1), Expression.Constant(2), "<"));
+        Assert.IsAssignableFrom<BinaryExpression>(JsonPath.BuildFilterComparison(Expression.Constant(2), Expression.Constant(1), ">"));
+        Assert.IsAssignableFrom<BinaryExpression>(JsonPath.BuildFilterComparison(Expression.Constant(1), Expression.Constant(2), "<="));
+        Assert.IsAssignableFrom<BinaryExpression>(JsonPath.BuildFilterComparison(Expression.Constant(2), Expression.Constant(1), ">="));
+        Assert.IsAssignableFrom<MethodCallExpression>(JsonPath.BuildFilterComparison(Expression.Parameter(typeof(object), "o"), Expression.Constant(1), "=="));
+        Assert.Throws<NotSupportedException>(() => JsonPath.BuildFilterComparison(Expression.Constant(1), Expression.Constant(1), "<>"));
     }
 
     [Fact]
     public void KeyAndEnumerableHelpersHandleEdgeCases()
     {
-        Assert.True(JsonPathLINQ.TryConvertStringKey("value", typeof(string), out var stringKey));
+        Assert.True(JsonPath.TryConvertStringKey("value", typeof(string), out var stringKey));
         Assert.Equal("value", stringKey);
 
-        Assert.True(JsonPathLINQ.TryConvertStringKey("12", typeof(int), out var intKey));
+        Assert.True(JsonPath.TryConvertStringKey("12", typeof(int), out var intKey));
         Assert.Equal(12, intKey);
 
-        Assert.False(JsonPathLINQ.TryConvertStringKey("nope", typeof(Guid), out _));
+        Assert.False(JsonPath.TryConvertStringKey("nope", typeof(Guid), out _));
 
-        Assert.Null(JsonPathLINQ.GetEnumerableElementType(typeof(string)));
-        Assert.Equal(typeof(int), JsonPathLINQ.GetEnumerableElementType(typeof(int[])));
-        Assert.Equal(typeof(int), JsonPathLINQ.GetEnumerableElementType(typeof(IEnumerable<int>)));
-        Assert.Equal(typeof(int), JsonPathLINQ.GetEnumerableElementType(typeof(List<int>)));
+        Assert.Null(JsonPath.GetEnumerableElementType(typeof(string)));
+        Assert.Equal(typeof(int), JsonPath.GetEnumerableElementType(typeof(int[])));
+        Assert.Equal(typeof(int), JsonPath.GetEnumerableElementType(typeof(IEnumerable<int>)));
+        Assert.Equal(typeof(int), JsonPath.GetEnumerableElementType(typeof(List<int>)));
 
         var enumerableParameter = Expression.Parameter(typeof(IEnumerable<int>), "items");
-        var ensuredDirect = JsonPathLINQ.EnsureEnumerable(enumerableParameter, typeof(int));
+        var ensuredDirect = JsonPath.EnsureEnumerable(enumerableParameter, typeof(int));
         Assert.Same(enumerableParameter, ensuredDirect);
 
         var arrayListParameter = Expression.Parameter(typeof(ArrayList), "items");
-        var ensuredConverted = JsonPathLINQ.EnsureEnumerable(arrayListParameter, typeof(int));
+        var ensuredConverted = JsonPath.EnsureEnumerable(arrayListParameter, typeof(int));
         Assert.Equal(typeof(IEnumerable<int>), ensuredConverted.Type);
         Assert.IsAssignableFrom<UnaryExpression>(ensuredConverted);
 
-        Assert.True(JsonPathLINQ.CanConvert(typeof(int), typeof(double)));
-        Assert.True(JsonPathLINQ.CanConvert(typeof(string), typeof(string)));
-        Assert.True(JsonPathLINQ.CanConvert(typeof(int?), typeof(double?)));
-        Assert.False(JsonPathLINQ.CanConvert(typeof(string), typeof(Guid)));
+        Assert.True(JsonPath.CanConvert(typeof(int), typeof(double)));
+        Assert.True(JsonPath.CanConvert(typeof(string), typeof(string)));
+        Assert.True(JsonPath.CanConvert(typeof(int?), typeof(double?)));
+        Assert.False(JsonPath.CanConvert(typeof(string), typeof(Guid)));
     }
 
     [Fact]

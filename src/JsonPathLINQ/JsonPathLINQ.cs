@@ -8,7 +8,7 @@ using System.Text.Json.Serialization;
 
 namespace JsonPathLINQ;
 
-public static class JsonPathLINQ
+public static class JsonPath
 {
     private static readonly MethodInfo EnumerableFirstOrDefaultWithPredicate = typeof(Enumerable)
         .GetMethods(BindingFlags.Public | BindingFlags.Static)
@@ -637,8 +637,8 @@ public static class JsonPathLINQ
 
     private static MethodInfo GetMethod(string name)
     {
-        return typeof(JsonPathLINQ).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static)
-               ?? throw new MissingMethodException(typeof(JsonPathLINQ).FullName, name);
+        return typeof(JsonPath).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static)
+               ?? throw new MissingMethodException(typeof(JsonPath).FullName, name);
     }
 
     internal static object? GetLateBoundMember(object? source, string name)

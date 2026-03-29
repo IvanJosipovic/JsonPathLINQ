@@ -23,8 +23,8 @@ It is intended for querying:
 The public API is:
 
 ```csharp
-var expression = JsonPathLINQ.JsonPathLINQ.GetExpression<T>(jsonPath, addNullChecks: false);
-var typedExpression = JsonPathLINQ.JsonPathLINQ.GetExpression<T, TResult>(jsonPath, addNullChecks: false);
+var expression = JsonPath.GetExpression<T>(jsonPath, addNullChecks: false);
+var typedExpression = JsonPath.GetExpression<T, TResult>(jsonPath, addNullChecks: false);
 ```
 
 ## Install
@@ -88,7 +88,7 @@ public sealed class TestObject
     public string? StringValue { get; set; }
 }
 
-var expression = JsonPathLINQ.JsonPathLINQ.GetExpression<TestObject>(".StringValue");
+var expression = JsonPath.GetExpression<TestObject>(".StringValue");
 var compiled = expression.Compile();
 
 var result = compiled(new TestObject { StringValue = "hello" });
@@ -109,7 +109,7 @@ public sealed class Container
     public string? Status { get; set; }
 }
 
-var expression = JsonPathLINQ.JsonPathLINQ.GetExpression<Pod>(
+var expression = JsonPath.GetExpression<Pod>(
     ".Containers[?(@.Status==\"Ready\")].Name");
 
 var compiled = expression.Compile();
@@ -132,15 +132,15 @@ var instance = new MyClass
     MyDocument = JsonDocument.Parse("""{ "foo": { "bar": "document" } }""")
 };
 
-var fromNode = JsonPathLINQ.JsonPathLINQ
+var fromNode = JsonPath
     .GetExpression<MyClass>(".MyNode.foo.bar")
     .Compile()(instance);
 
-var fromElement = JsonPathLINQ.JsonPathLINQ
+var fromElement = JsonPath
     .GetExpression<MyClass>(".MyElement.foo.bar")
     .Compile()(instance);
 
-var fromDocument = JsonPathLINQ.JsonPathLINQ
+var fromDocument = JsonPath
     .GetExpression<MyClass>(".MyDocument.foo.bar")
     .Compile()(instance);
 ```
@@ -148,7 +148,7 @@ var fromDocument = JsonPathLINQ.JsonPathLINQ
 ### Null-safe access
 
 ```csharp
-var expression = JsonPathLINQ.JsonPathLINQ.GetExpression<MyClass>(
+var expression = JsonPath.GetExpression<MyClass>(
     ".MyNode.foo.missing.value",
     addNullChecks: true);
 

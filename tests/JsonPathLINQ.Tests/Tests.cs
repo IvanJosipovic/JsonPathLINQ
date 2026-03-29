@@ -28,7 +28,7 @@ public class Tests
             new TestObject2() { Type = "3", Status = "Starting", Nested = new TestObject2.TestObject3(){ Name = "Nested3" } },
         };
 
-        public List<TestObject2> nullSubClassList { get; set; }
+        public List<TestObject2>? nullSubClassList { get; set; }
 
         public IDictionary<string, string> idictionary { get; set; } = new Dictionary<string,string>
         {
@@ -46,7 +46,7 @@ public class Tests
         {
             public string? Type { get; set; } = "Type1";
 
-            public string Status { get; set; } = "Status1";
+            public string? Status { get; set; } = "Status1";
 
             public int intValue { get; set; } = 7;
 
@@ -56,7 +56,7 @@ public class Tests
 
             public double doubleValue { get; set; } = 12.23;
 
-            public TestObject3 Nested { get; set; }
+            public TestObject3 Nested { get; set; } = new();
 
             public class TestObject3
             {
@@ -69,31 +69,31 @@ public class Tests
     {
         return
         [
-            new object[] { ".stringValue", "TestString", false },
-            new object[] { ".intValue", 7, false },
-            new object[] { ".boolValue", false, false },
-            new object[] { ".decimalValue", 18.4, false },
-            new object[] { ".doubleValue", 12.23, false },
-            new object[] { ".subClass.Type", "Type1", false },
-            new object[] { ".subClassList[?(@.Type==\"3\")].Status", "Starting", false },
-            new object[] { ".subClassList[?(@.Nested.Name==\"Nested3\")].Status", "Starting", false },
-            new object[] { ".idictionary.key", "value", false },
-            new object[] { ".dictionary.key", "value", false },
-            new object[] { ".dictionary.crossplane\\.io/external-name", "value1", false },
+            [".stringValue", "TestString", false],
+            [".intValue", 7, false],
+            [".boolValue", false, false],
+            [".decimalValue", 18.4, false],
+            [".doubleValue", 12.23, false],
+            [".subClass.Type", "Type1", false],
+            [".subClassList[?(@.Type==\"3\")].Status", "Starting", false],
+            [".subClassList[?(@.Nested.Name==\"Nested3\")].Status", "Starting", false],
+            [".idictionary.key", "value", false],
+            [".dictionary.key", "value", false],
+            [".dictionary.crossplane\\.io/external-name", "value1", false],
 
 
-            new object[] { ".stringValue", "TestString", true },
-            new object[] { ".intValue", 7, true },
-            new object[] { ".subClass.intValue", 7, true },
-            new object[] { ".subClass.boolValue", false, true },
-            new object[] { ".subClass.decimalValue", 18.4, true },
-            new object[] { ".subClass.doubleValue", 12.23, true },
-            new object[] { ".subClass.Type", "Type1", true },
-            new object[] { ".subClassList[?(@.Type==\"3\")].Status", "Starting", true },
-            new object[] { ".subClassList[?(@.Nested.Name==\"Nested3\")].Status", "Starting", true },
+            [".stringValue", "TestString", true],
+            [".intValue", 7, true],
+            [".subClass.intValue", 7, true],
+            [".subClass.boolValue", false, true],
+            [".subClass.decimalValue", 18.4, true],
+            [".subClass.doubleValue", 12.23, true],
+            [".subClass.Type", "Type1", true],
+            [".subClassList[?(@.Type==\"3\")].Status", "Starting", true],
+            [".subClassList[?(@.Nested.Name==\"Nested3\")].Status", "Starting", true],
 
-            new object[] { ".nullSubClassList[?(@.Type==\"3\")].Status", "", true },
-            new object[] { ".nullSubClassList[?(@.Nested.Name==\"Nested3\")].Status", "", true },
+            [".nullSubClassList[?(@.Type==\"3\")].Status", "", true],
+            [".nullSubClassList[?(@.Nested.Name==\"Nested3\")].Status", "", true],
         ];
     }
 
@@ -101,7 +101,7 @@ public class Tests
     [MemberData(nameof(GetValueTests))]
     public void ValueTests(string jsonPath, object value, bool addNullChecks)
     {
-        var expression = JsonPathLINQ.GetExpression<TestObject>(jsonPath, addNullChecks);
+        var expression = JsonPath.GetExpression<TestObject>(jsonPath, addNullChecks);
 
         expression.Compile().Invoke(new TestObject()).ShouldBe(value);
     }
@@ -120,7 +120,7 @@ public class Tests
     [MemberData(nameof(GetCollectionValueTests))]
     public void CollectionValueTests(string jsonPath, object value, bool addNullChecks)
     {
-        var expression = JsonPathLINQ.GetExpression<TestObject[]>(jsonPath, addNullChecks);
+        var expression = JsonPath.GetExpression<TestObject[]>(jsonPath, addNullChecks);
 
         var items = new List<TestObject>();
 
@@ -141,16 +141,16 @@ public class Tests
     {
         return new List<object[]>
         {
-            new object[] { ".stringValue", Exp(x => (object)(x.stringValue)), false },
+            new object[] { ".stringValue", Exp(x => (object)(x.stringValue!)), false },
             new object[] { ".intValue", Exp(x => x.intValue), false },
             new object[] { ".boolValue", Exp(x => x.boolValue), false },
             new object[] { ".decimalValue", Exp(x => x.decimalValue), false },
             new object[] { ".doubleValue", Exp(x => x.doubleValue), false },
-            new object[] { ".subClass.Type", Exp(x => (object)(x.subClass.Type)), false },
-            new object[] { ".subClassList[?(@.Type==\"3\")].Status", Exp(x => (object)(x.subClassList.FirstOrDefault(y => y.Type == "3").Status)), false },
-            new object[] { ".subClassList[?(@.Nested.Name==\"Nested3\")].Status", Exp(x => (object)(x.subClassList.FirstOrDefault(y => y.Nested.Name == "Nested3").Status)), false },
-            new object[] { ".subClassList[?(@.Type=='3')].Status", Exp(x => (object)(x.subClassList.FirstOrDefault(y => y.Type == "3").Status)), false },
-            new object[] { ".subClassList[?(@.Nested.Name=='Nested3')].Status", Exp(x => (object)(x.subClassList.FirstOrDefault(y => y.Nested.Name == "Nested3").Status)), false },
+            new object[] { ".subClass.Type", Exp(x => (object)(x.subClass.Type!)), false },
+            new object[] { ".subClassList[?(@.Type==\"3\")].Status", Exp(x => (object)(x.subClassList.FirstOrDefault(y => y.Type == "3")!.Status!)), false },
+            new object[] { ".subClassList[?(@.Nested.Name==\"Nested3\")].Status", Exp(x => (object)(x.subClassList.FirstOrDefault(y => y.Nested.Name == "Nested3")!.Status!)), false },
+            new object[] { ".subClassList[?(@.Type=='3')].Status", Exp(x => (object)(x.subClassList.FirstOrDefault(y => y.Type == "3")!.Status!)), false },
+            new object[] { ".subClassList[?(@.Nested.Name=='Nested3')].Status", Exp(x => (object)(x.subClassList.FirstOrDefault(y => y.Nested.Name == "Nested3")!.Status!)), false },
             new object[] { ".idictionary.key", Exp(x => (object)((object)(x.idictionary["key"]))), false },
             new object[] { ".dictionary.key", Exp(x => (object)((object)(x.dictionary["key"]))), false },
 
@@ -178,7 +178,7 @@ public class Tests
     [MemberData(nameof(GetExpressionTests))]
     public void ExpressionTests(string jsonPath, string value, bool addNullChecks)
     {
-        var expression = JsonPathLINQ.GetExpression<TestObject>(jsonPath, addNullChecks);
+        var expression = JsonPath.GetExpression<TestObject>(jsonPath, addNullChecks);
 
         expression.ToString().ShouldBe(value);
     }
@@ -187,17 +187,17 @@ public class Tests
     {
         return
         [
-            new object[] { ".MyNode.foo.bar", "baz" },
-            new object[] { ".MyElement.foo.bar", "baz" },
-            new object[] { ".MyDocument.foo.bar", "baz" },
-            new object[] { ".MyObject.foo.bar", "baz" },
-            new object[] { ".MyArray[1].name", "two" },
-            new object[] { ".MyValue", "terminal" },
-            new object[] { ".MyNode.foo.items[1].rank", 2 },
-            new object[] { ".MyElement.foo.items[?(@.ready==true)].name", "two" },
-            new object[] { ".MyDocument.foo.items[?(@.rank==2)].name", "two" },
-            new object[] { ".MyArray[?(@.nullable==null)].name", "three" },
-            new object[] { ".MixedItems[?(@.Payload.status.ready==true)].Name", "beta" },
+            [".MyNode.foo.bar", "baz"],
+            [".MyElement.foo.bar", "baz"],
+            [".MyDocument.foo.bar", "baz"],
+            [".MyObject.foo.bar", "baz"],
+            [".MyArray[1].name", "two"],
+            [".MyValue", "terminal"],
+            [".MyNode.foo.items[1].rank", 2],
+            [".MyElement.foo.items[?(@.ready==true)].name", "two"],
+            [".MyDocument.foo.items[?(@.rank==2)].name", "two"],
+            [".MyArray[?(@.nullable==null)].name", "three"],
+            [".MixedItems[?(@.Payload.status.ready==true)].Name", "beta"],
         ];
     }
 
@@ -205,7 +205,7 @@ public class Tests
     [MemberData(nameof(GetSystemTextJsonValueTests))]
     public void SystemTextJsonValueTests(string jsonPath, object? expected)
     {
-        var expression = JsonPathLINQ.GetExpression<SystemTextJsonHost>(jsonPath);
+        var expression = JsonPath.GetExpression<SystemTextJsonHost>(jsonPath);
         var result = expression.Compile().Invoke(CreateSystemTextJsonHost());
 
         result.ShouldBe(expected);
@@ -214,7 +214,7 @@ public class Tests
     [Fact]
     public void SystemTextJsonTerminalContainersRemainNavigable()
     {
-        var expression = JsonPathLINQ.GetExpression<SystemTextJsonHost>(".MyNode.foo.items");
+        var expression = JsonPath.GetExpression<SystemTextJsonHost>(".MyNode.foo.items");
         var result = expression.Compile().Invoke(CreateSystemTextJsonHost());
 
         result.ShouldBeOfType<JsonArray>();
@@ -224,7 +224,7 @@ public class Tests
     [Fact]
     public void SystemTextJsonElementTerminalContainerRemainsJsonElement()
     {
-        var expression = JsonPathLINQ.GetExpression<SystemTextJsonHost>(".MyElement.foo");
+        var expression = JsonPath.GetExpression<SystemTextJsonHost>(".MyElement.foo");
         var result = expression.Compile().Invoke(CreateSystemTextJsonHost());
 
         result.ShouldBeOfType<JsonElement>();
@@ -234,7 +234,7 @@ public class Tests
     [Fact]
     public void SystemTextJsonNullChecksReturnNullForMissingJsonPath()
     {
-        var expression = JsonPathLINQ.GetExpression<SystemTextJsonHost>(".MyNode.foo.missing.value", true);
+        var expression = JsonPath.GetExpression<SystemTextJsonHost>(".MyNode.foo.missing.value", true);
         var result = expression.Compile().Invoke(CreateSystemTextJsonHost());
 
         result.ShouldBeNull();
@@ -243,7 +243,7 @@ public class Tests
     [Fact]
     public void SystemTextJsonMissingJsonPathWithoutNullChecksReturnsNull()
     {
-        var expression = JsonPathLINQ.GetExpression<SystemTextJsonHost>(".MyDocument.foo.missing.value");
+        var expression = JsonPath.GetExpression<SystemTextJsonHost>(".MyDocument.foo.missing.value");
         var result = expression.Compile().Invoke(CreateSystemTextJsonHost());
 
         result.ShouldBeNull();
@@ -252,7 +252,7 @@ public class Tests
     [Fact]
     public void SystemTextJsonCanProjectDirectJsonObject()
     {
-        var expression = JsonPathLINQ.GetExpression<SystemTextJsonHost>(".MyObject");
+        var expression = JsonPath.GetExpression<SystemTextJsonHost>(".MyObject");
         var result = expression.Compile().Invoke(CreateSystemTextJsonHost());
 
         result.ShouldBeOfType<JsonObject>();
@@ -265,13 +265,13 @@ public class Tests
 
         public class NestedObject
         {
-            public string String { get; set; }
+            public string String { get; set; } = string.Empty;
 
-            public List<CollectionObject> Strings { get; set; }
+            public List<CollectionObject> Strings { get; set; } = [];
 
             public class CollectionObject
             {
-                public string String { get; set; }
+                public string String { get; set; } = string.Empty;
             }
         }
     }
@@ -306,14 +306,14 @@ public class Tests
             },
         };
 
-        var expression = JsonPathLINQ.GetExpression<NullSortTestObject>(".Nested.String", true);
+        var expression = JsonPath.GetExpression<NullSortTestObject>(".Nested.String", true);
         var str = expression.ToString("Object notation", "C#");
 
         var items = lst.AsQueryable().OrderBy(expression).ToList();
         items.Count.ShouldBe(3);
 
 
-        var expression2 = JsonPathLINQ.GetExpression<NullSortTestObject>(".Nested.Strings[?(@.String==\"two\")].String", true);
+        var expression2 = JsonPath.GetExpression<NullSortTestObject>(".Nested.Strings[?(@.String==\"two\")].String", true);
         var str2 = expression.ToString("Object notation", "C#");
 
         var items2 = lst.AsQueryable().OrderBy(expression).ToList();
@@ -323,9 +323,9 @@ public class Tests
     [Fact]
     public void Test1()
     {
-        Expression<Func<TestObject, object>> test1 = x => x.subClass == null ? "" : x.subClass.Type;
+        Expression<Func<TestObject, object>> test1 = x => x.subClass == null ? "" : x.subClass.Type!;
         Expression<Func<TestObject, object>> test2 = x => x.subClass == null ? "" : x.subClass.Type ?? "";
-        Expression<Func<TestObject, object>> test3 = x => x.subClass == null ? "" : x.subClass.Type == null ? "" : x.subClass.Type;
+        Expression<Func<TestObject, object>> test3 = x => x.subClass == null ? "" : x.subClass.Type == null ? "" : x.subClass.Type!;
 
         var t1 = test1.ToString("Object notation", "C#");
 
@@ -338,14 +338,14 @@ public class Tests
     {
         return new List<object[]>
         {
-            new object[] { Exp2(x => x.stringValue), Exp(x => (object)(x.stringValue == null ? "" : x.stringValue)) },
+            new object[] { Exp2(x => x.stringValue!), Exp(x => (object)(x.stringValue == null ? "" : x.stringValue)) },
             new object[] { Exp2(x => x.intValue), Exp(x => x.intValue) },
             new object[] { Exp2(x => x.boolValue), Exp(x => x.boolValue) },
             new object[] { Exp2(x => x.decimalValue), Exp(x => x.decimalValue) },
             new object[] { Exp2(x => x.doubleValue), Exp(x => x.doubleValue) },
-            new object[] { Exp2(x => x.subClass.Type), Exp(x => (object)(x.subClass == null ? "" : x.subClass.Type == null ? "" : x.subClass.Type)) },
-            new object[] { Exp2(x => x.subClass.Nested.Name), Exp(x => (object)(x.subClass == null ? "" : x.subClass.Nested == null ? "" : x.subClass.Nested.Name == null ? "" : x.subClass.Nested.Name)) },
-            new object[] { Exp2(x => x.nullSubClassList.FirstOrDefault(y => y.Type == "3").Status), Exp(x => (object)(x.nullSubClassList == null ? "" : x.nullSubClassList.FirstOrDefault(y => y.Type == "3") == null ? "" : x.nullSubClassList.FirstOrDefault(y => y.Type == "3").Status == null ? "" : x.nullSubClassList.FirstOrDefault(y => y.Type == "3").Status)) },
+            new object[] { Exp2(x => x.subClass.Type!), Exp(x => (object)(x.subClass == null ? "" : x.subClass.Type == null ? "" : x.subClass.Type)) },
+            new object[] { Exp2(x => x.subClass.Nested.Name!), Exp(x => (object)(x.subClass == null ? "" : x.subClass.Nested == null ? "" : x.subClass.Nested.Name == null ? "" : x.subClass.Nested.Name)) },
+            new object[] { Exp2(x => x.nullSubClassList!.FirstOrDefault(y => y.Type == "3")!.Status!), Exp(x => (object)(x.nullSubClassList == null ? "" : x.nullSubClassList.FirstOrDefault(y => y.Type == "3") == null ? "" : x.nullSubClassList.FirstOrDefault(y => y.Type == "3")!.Status == null ? "" : x.nullSubClassList.FirstOrDefault(y => y.Type == "3")!.Status!)) },
         };
     }
 
@@ -353,7 +353,7 @@ public class Tests
     [MemberData(nameof(GetNullCheckTests))]
     public void NullCheckTests(Expression<Func<TestObject, object>> queryExpression, string value)
     {
-        var expression = JsonPathLINQ.CreateNullChecks(queryExpression.Body);
+        var expression = JsonPath.CreateNullChecks(queryExpression.Body);
 
         Expression conversion = Expression.Convert(expression, typeof(object));
 
