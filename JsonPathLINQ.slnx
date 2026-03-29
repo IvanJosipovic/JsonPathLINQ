@@ -1,0 +1,17 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/Solution Items/">
+    <File Path=".github/workflows/release.yaml" />
+    <File Path="global.json" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/JsonPathLINQ/JsonPathLINQ.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/JsonPathLINQ.Tests/JsonPathLINQ.Tests.csproj" />
+  </Folder>
+</Solution>

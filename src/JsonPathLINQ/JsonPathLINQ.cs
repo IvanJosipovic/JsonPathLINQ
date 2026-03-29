@@ -203,7 +203,7 @@ public static class JsonPathLINQ
         throw new NotSupportedException($"Field '{node.Value}' was not found on type '{source.Type}'.");
     }
 
-    private static Expression GenerateArray(ArrayNode node, Expression source)
+    internal static Expression GenerateArray(ArrayNode node, Expression source)
     {
         if (node.Params.Length != 3)
         {
@@ -287,7 +287,7 @@ public static class JsonPathLINQ
             predicate);
     }
 
-    private static Expression BuildFilterComparison(Expression left, Expression right, string @operator)
+    internal static Expression BuildFilterComparison(Expression left, Expression right, string @operator)
     {
         if (RequiresDynamicComparison(left.Type, right.Type))
         {
@@ -312,7 +312,7 @@ public static class JsonPathLINQ
         };
     }
 
-    private static (Expression Left, Expression Right) AlignComparisonTypes(Expression left, Expression right)
+    internal static (Expression Left, Expression Right) AlignComparisonTypes(Expression left, Expression right)
     {
         if (left.Type == right.Type)
         {
@@ -439,7 +439,7 @@ public static class JsonPathLINQ
         return false;
     }
 
-    private static bool TryConvertStringKey(string key, Type keyType, out object converted)
+    internal static bool TryConvertStringKey(string key, Type keyType, out object converted)
     {
         if (keyType == typeof(string))
         {
@@ -459,7 +459,7 @@ public static class JsonPathLINQ
         }
     }
 
-    private static Type? GetEnumerableElementType(Type type)
+    internal static Type? GetEnumerableElementType(Type type)
     {
         if (type == typeof(string))
         {
@@ -481,7 +481,7 @@ public static class JsonPathLINQ
             ?.GetGenericArguments()[0];
     }
 
-    private static Expression EnsureEnumerable(Expression source, Type elementType)
+    internal static Expression EnsureEnumerable(Expression source, Type elementType)
     {
         var enumerableType = typeof(IEnumerable<>).MakeGenericType(elementType);
         return enumerableType.IsAssignableFrom(source.Type)
@@ -489,7 +489,7 @@ public static class JsonPathLINQ
             : Expression.Convert(source, enumerableType);
     }
 
-    private static bool CanConvert(Type source, Type destination)
+    internal static bool CanConvert(Type source, Type destination)
     {
         if (destination.IsAssignableFrom(source))
         {
@@ -641,7 +641,7 @@ public static class JsonPathLINQ
                ?? throw new MissingMethodException(typeof(JsonPathLINQ).FullName, name);
     }
 
-    private static object? GetLateBoundMember(object? source, string name)
+    internal static object? GetLateBoundMember(object? source, string name)
     {
         if (source is null)
         {
@@ -700,7 +700,7 @@ public static class JsonPathLINQ
         return null;
     }
 
-    private static object? GetJsonElementProperty(JsonElement source, string name)
+    internal static object? GetJsonElementProperty(JsonElement source, string name)
     {
         if (source.ValueKind != JsonValueKind.Object)
         {
@@ -723,7 +723,7 @@ public static class JsonPathLINQ
         return null;
     }
 
-    private static object? GetJsonNodeProperty(JsonNode? source, string name)
+    internal static object? GetJsonNodeProperty(JsonNode? source, string name)
     {
         if (source is not JsonObject jsonObject)
         {
@@ -746,7 +746,7 @@ public static class JsonPathLINQ
         return null;
     }
 
-    private static object? GetDynamicArrayIndex(object? source, int index)
+    internal static object? GetDynamicArrayIndex(object? source, int index)
     {
         if (source is null)
         {
@@ -817,7 +817,7 @@ public static class JsonPathLINQ
         throw new ArgumentOutOfRangeException(nameof(index));
     }
 
-    private static IEnumerable<object?> EnumerateDynamic(object? source)
+    internal static IEnumerable<object?> EnumerateDynamic(object? source)
     {
         if (source is null)
         {
@@ -885,7 +885,7 @@ public static class JsonPathLINQ
         }
     }
 
-    private static bool CompareDynamicValues(object? left, object? right, string @operator)
+    internal static bool CompareDynamicValues(object? left, object? right, string @operator)
     {
         left = NormalizeDynamicValue(left);
         right = NormalizeDynamicValue(right);
@@ -903,16 +903,16 @@ public static class JsonPathLINQ
         };
     }
 
-    private static object? GetJsonElementValueOrSelf(JsonElement value) => ConvertJsonElementValue(value);
+    internal static object? GetJsonElementValueOrSelf(JsonElement value) => ConvertJsonElementValue(value);
 
-    private static object? GetJsonNodeValueOrSelf(JsonNode? value) => ConvertJsonNodeValue(value);
+    internal static object? GetJsonNodeValueOrSelf(JsonNode? value) => ConvertJsonNodeValue(value);
 
-    private static object? GetJsonDocumentValueOrSelf(JsonDocument? value)
+    internal static object? GetJsonDocumentValueOrSelf(JsonDocument? value)
     {
         return value is null ? null : ConvertJsonElementValue(value.RootElement);
     }
 
-    private static object? ConvertJsonElementValue(JsonElement value)
+    internal static object? ConvertJsonElementValue(JsonElement value)
     {
         return value.ValueKind switch
         {
@@ -926,7 +926,7 @@ public static class JsonPathLINQ
         };
     }
 
-    private static object? ConvertJsonNodeValue(JsonNode? value)
+    internal static object? ConvertJsonNodeValue(JsonNode? value)
     {
         if (value is null)
         {
@@ -976,7 +976,7 @@ public static class JsonPathLINQ
         return jsonValue.ToJsonString();
     }
 
-    private static object? NormalizeDynamicValue(object? value)
+    internal static object? NormalizeDynamicValue(object? value)
     {
         if (value is JsonDocument document)
         {
@@ -998,7 +998,7 @@ public static class JsonPathLINQ
         return value;
     }
 
-    private static object TryGetJsonNumber(JsonElement value)
+    internal static object TryGetJsonNumber(JsonElement value)
     {
         if (value.TryGetInt32(out var intValue))
         {
@@ -1018,7 +1018,7 @@ public static class JsonPathLINQ
         return value.GetDouble();
     }
 
-    private static int CompareNormalizedValues(object? left, object? right)
+    internal static int CompareNormalizedValues(object? left, object? right)
     {
         if (left is null && right is null)
         {
@@ -1050,7 +1050,7 @@ public static class JsonPathLINQ
         return string.Compare(leftText, rightText, StringComparison.Ordinal);
     }
 
-    private static bool TryConvertToDecimal(object value, out decimal result)
+    internal static bool TryConvertToDecimal(object value, out decimal result)
     {
         switch (value)
         {

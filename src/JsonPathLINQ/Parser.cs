@@ -35,7 +35,7 @@ public sealed class Parser
         return parser;
     }
 
-    private static Parser ParseAction(string name, string text)
+    internal static Parser ParseAction(string name, string text)
     {
         var parser = Parse(name, $"{LeftDelim}{text}{RightDelim}");
         parser.Root = parser.Root.Nodes[0] as ListNode ?? throw new JsonPathParseException("expected list node");
