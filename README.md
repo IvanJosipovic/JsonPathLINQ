@@ -1,5 +1,5 @@
 # JsonPathLINQ
-Generate LINQ expressions from a supported JsonPath subset.
+Generate LINQ Expressions from JsonPath.
 
 [![Nuget](https://img.shields.io/nuget/vpre/JsonPathLINQ.svg?style=flat-square)](https://www.nuget.org/packages/JsonPathLINQ)
 [![Nuget)](https://img.shields.io/nuget/dt/JsonPathLINQ.svg?style=flat-square)](https://www.nuget.org/packages/JsonPathLINQ)
@@ -7,10 +7,10 @@ Generate LINQ expressions from a supported JsonPath subset.
 
 ## What it does
 
-`JsonPathLINQ` converts a JsonPath-like string into a compiled LINQ expression:
+`JsonPathLINQ` converts a JsonPath string into a Linq Expression:
 
 ```csharp
-Expression<Func<T, object>>
+Expression<Func<T, TResult>>
 ```
 
 It is intended for querying:

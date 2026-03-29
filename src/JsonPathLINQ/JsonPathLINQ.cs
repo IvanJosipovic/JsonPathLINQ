@@ -55,11 +55,11 @@ public static class JsonPath
     /// Returns a Expression representing the jsonPath
     /// </summary>
     /// <typeparam name="T">source object</typeparam>
-    /// <typeparam name="T2">return type</typeparam>
+    /// <typeparam name="TResult">return type</typeparam>
     /// <param name="jsonPath">jsonPath</param>
     /// <param name="addNullChecks">add null checks</param>
     /// <returns></returns>
-    public static Expression<Func<T, T2>> GetExpression<T, T2>(string jsonPath, bool addNullChecks = false)
+    public static Expression<Func<T, TResult>> GetExpression<T, TResult>(string jsonPath, bool addNullChecks = false)
     {
         ArgumentException.ThrowIfNullOrEmpty(jsonPath);
 
@@ -89,16 +89,16 @@ public static class JsonPath
             body = CreateNullChecks(body);
         }
 
-        if (typeof(T2) == typeof(object))
+        if (typeof(TResult) == typeof(object))
         {
             body = Expression.Convert(body, typeof(object));
         }
-        else if (body.Type != typeof(T2))
+        else if (body.Type != typeof(TResult))
         {
-            body = Expression.Convert(body, typeof(T2));
+            body = Expression.Convert(body, typeof(TResult));
         }
 
-        return Expression.Lambda<Func<T, T2>>(body, parameter);
+        return Expression.Lambda<Func<T, TResult>>(body, parameter);
     }
 
     public static Expression Generate(INode node)

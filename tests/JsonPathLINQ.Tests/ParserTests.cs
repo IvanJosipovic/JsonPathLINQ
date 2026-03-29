@@ -267,6 +267,66 @@ public sealed class ParserTests
         Assert.Contains(testCase.Error, error.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("\"\\b\\f\\n\\r\\t\\\\\\\"\\'\"", "\b\f\n\r\t\\\"'")]
+    [InlineData("\"\\u0041\"", "A")]
+    [InlineData("'plain'", "plain")]
+    public void UnquoteExtendParsesEscapes(string input, string expected)
+    {
+        Assert.Equal(expected, Parser.UnquoteExtend(input));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("\"unterminated")]
+    [InlineData("x")]
+    [InlineData("\"\\u12\"")]
+    [InlineData("\"\\uZZZZ\"")]
+    [InlineData("\"abc\\\"")]
+    public void UnquoteExtendRejectsInvalidInput(string input)
+    {
+        Assert.ThrowsAny<Exception>(() => Parser.UnquoteExtend(input));
+    }
+
+    [Fact]
+    public void JsonPathParseExceptionSupportsInnerException()
+    {
+        var inner = new InvalidOperationException("boom");
+        var exception = new JsonPathParseException("outer", inner);
+
+        Assert.Same(inner, exception.InnerException);
+    }
+
+    [Fact]
+    public void ParseActionParsesListRoot()
+    {
+        var parser = Parser.ParseAction("ok", ".Name");
+
+        var field = Assert.IsType<FieldNode>(Assert.Single(parser.Root.Nodes));
+        Assert.Equal("Name", field.Value);
+    }
+
+    [Theory]
+    [InlineData("{.Name", "unclosed action")]
+    [InlineData("{+}", "cannot parse number")]
+    [InlineData("{.Name[abc]}", "invalid array index")]
+    [InlineData("{\"unterminated}", "unterminated quoted string")]
+    public void ParserCoversAdditionalFailureCases(string text, string messageFragment)
+    {
+        var exception = Assert.Throws<JsonPathParseException>(() => Parser.Parse("extra", text));
+        Assert.Contains(messageFragment, exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ParserParsesTabWhitespaceAndAtRoot()
+    {
+        var parser = Parser.Parse("tab", "{\t@.Name}");
+
+        var root = Assert.IsType<ListNode>(Assert.Single(parser.Root.Nodes));
+        var field = Assert.IsType<FieldNode>(Assert.Single(root.Nodes));
+        Assert.Equal("Name", field.Value);
+    }
+
     private static List<INode> CollectNodes(List<INode> nodes, INode current)
     {
         nodes.Add(current);

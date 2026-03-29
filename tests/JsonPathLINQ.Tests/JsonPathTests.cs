@@ -1,57 +1,32 @@
 using System.Collections;
-using System.Globalization;
-using System.Reflection;
-using System.Text;
-using System.Text.Json;
 using System.Text.Json.Serialization;
+using ExpressionTreeToString;
 using JsonPathLINQ;
+using Shouldly;
 
 namespace JsonPathLINQ.Tests;
 
-public record JsonPathTestCase(string Name, string Template, object? Input, string Expected, bool ExpectError = false);
-
 public sealed class JsonPathTests
 {
-    public static TheoryData<JsonPathTestCase> TypesInputData => CreateTypesInputData();
+    [Theory]
+    [MemberData(nameof(JsonPathSharedTestData.ExpressionCases), MemberType = typeof(JsonPathSharedTestData))]
+    public void GetExpressionReturnsExpectedValueForClrObject(JsonPathExpressionCase testCase)
+    {
+        var expression = JsonPath.GetExpression<ExpressionTestObject>(testCase.JsonPath, testCase.AddNullChecks);
 
-    public static TheoryData<JsonPathTestCase> StructInputData => CreateStructInputData();
-
-    public static TheoryData<JsonPathTestCase> StructInputAllowMissingData => CreateStructInputAllowMissingData();
-
-    public static TheoryData<JsonPathTestCase> StructInputFailureData => CreateStructInputFailureData();
-
-    public static TheoryData<JsonPathTestCase> JsonInputData => CreateJsonInputData();
-
-    public static TheoryData<JsonPathTestCase> KubernetesSampleData => CreateKubernetesSampleData();
-
-    public static TheoryData<JsonPathTestCase> KubernetesSampleSortedData => CreateKubernetesSampleSortedData();
-
-    public static TheoryData<JsonPathTestCase> EmptyRangeData => CreateEmptyRangeData();
-
-    public static TheoryData<JsonPathTestCase> NestedRangesData => CreateNestedRangesData();
-
-    public static TheoryData<JsonPathTestCase> FilterPartialMatchesAllowMissingData => CreateFilterPartialMatchesAllowMissingData();
-
-    public static TheoryData<JsonPathTestCase> FilterPartialMatchesStrictData => CreateFilterPartialMatchesStrictData();
-
-    public static TheoryData<JsonPathTestCase> NegativeIndexData => CreateNegativeIndexData();
-
-    public static TheoryData<JsonPathTestCase> RunningPodsJsonOutputData => CreateRunningPodsJsonOutputData();
-
-    public static TheoryData<JsonPathTestCase> StepData => CreateStepData();
-
-    public static TheoryData<JsonPathTestCase, JsonPathTestOptions> SystemCases => CreateSystemCases();
+        expression.Compile()(testCase.Input).ShouldBe(testCase.Expected);
+    }
 
     [Theory]
-    [MemberData(nameof(SystemCases))]
-    public void JsonPathSystemCases(JsonPathTestCase testCase, JsonPathTestOptions options)
+    [MemberData(nameof(JsonPathSharedTestData.TemplateCases), MemberType = typeof(JsonPathSharedTestData))]
+    public void TemplateEvaluationReturnsExpectedValueForClrObject(JsonPathTemplateCase testCase)
     {
         string? result = null;
         Exception? error = null;
 
         try
         {
-            result = EvaluateTemplate(testCase.Template, testCase.Input, options);
+            result = JsonPathTemplateEvaluator.Evaluate(testCase.Template, testCase.Input, testCase.AllowMissingKeys, testCase.SortResults);
         }
         catch (Exception ex)
         {
@@ -61,11 +36,7 @@ public sealed class JsonPathTests
         if (testCase.ExpectError)
         {
             Assert.NotNull(error);
-            if (!string.IsNullOrWhiteSpace(testCase.Expected))
-            {
-                Assert.Contains(testCase.Expected, error.Message, StringComparison.Ordinal);
-            }
-
+            Assert.Contains(testCase.Expected, error.Message, StringComparison.Ordinal);
             return;
         }
 
@@ -73,1235 +44,541 @@ public sealed class JsonPathTests
         Assert.Equal(testCase.Expected, result);
     }
 
-    private static TheoryData<JsonPathTestCase, JsonPathTestOptions> CreateSystemCases()
+    public static IEnumerable<object[]> GetExpressionCollectionCases()
     {
-        var allowMissing = new JsonPathTestOptions(AllowMissingKeys: true, SortResults: false);
-        var strict = new JsonPathTestOptions(AllowMissingKeys: false, SortResults: false);
-        var sortedAllowMissing = new JsonPathTestOptions(AllowMissingKeys: true, SortResults: false);
-
-        var data = new TheoryData<JsonPathTestCase, JsonPathTestOptions>();
-        AddSuiteCases(data, TypesInputData, allowMissing);
-        AddSuiteCases(data, StructInputData, allowMissing);
-        AddSuiteCases(data, StructInputAllowMissingData, allowMissing);
-        AddSuiteCases(data, StructInputFailureData, strict);
-        AddSuiteCases(data, JsonInputData, allowMissing);
-        AddSuiteCases(data, KubernetesSampleData, allowMissing);
-        AddSuiteCases(data, KubernetesSampleSortedData, sortedAllowMissing);
-        AddSuiteCases(data, EmptyRangeData, allowMissing);
-        AddSuiteCases(data, NestedRangesData, allowMissing);
-        AddSuiteCases(data, FilterPartialMatchesAllowMissingData, allowMissing);
-        AddSuiteCases(data, FilterPartialMatchesStrictData, strict);
-        AddSuiteCases(data, NegativeIndexData, allowMissing);
-        AddSuiteCases(data, RunningPodsJsonOutputData, allowMissing);
-        AddSuiteCases(data, StepData, allowMissing);
-        return data;
-    }
-
-    private static void AddSuiteCases(
-        TheoryData<JsonPathTestCase, JsonPathTestOptions> target,
-        TheoryData<JsonPathTestCase> source,
-        JsonPathTestOptions options)
-    {
-        foreach (var testCase in source)
-        {
-            target.Add(testCase, options);
-        }
-    }
-
-    private static TheoryData<JsonPathTestCase> CreateTypesInputData()
-    {
-        var types = new Dictionary<string, object?>
-        {
-            ["bools"] = new List<bool> { true, false, true, false },
-            ["integers"] = new List<int> { 1, 2, 3, 4 },
-            ["floats"] = new List<double> { 1.0, 2.2, 3.3, 4.0 },
-            ["strings"] = new List<string> { "one", "two", "three", "four" },
-            ["interfaces"] = new List<object?> { true, "one", 1, 1.1 },
-            ["maps"] = new List<Dictionary<string, object?>>
-            {
-                new() { ["name"] = "one", ["value"] = 1 },
-                new() { ["name"] = "two", ["value"] = 2.02 },
-                new() { ["name"] = "three", ["value"] = 3.03 },
-                new() { ["name"] = "four", ["value"] = 4.04 },
-            },
-            ["structs"] = new List<TestStruct>
-            {
-                new("one", 1, "integer"),
-                new("two", 2.002, "float"),
-                new("three", 3, "integer"),
-                new("four", 4.004, "float"),
-            },
-        };
-
-        var data = new TheoryData<JsonPathTestCase>();
-        data.Add(new JsonPathTestCase("boolSlice", "{ .bools }", types, "[true,false,true,false]"));
-        data.Add(new JsonPathTestCase("boolSliceIndex", "{ .bools[0] }", types, "true"));
-        data.Add(new JsonPathTestCase("boolSliceIndexNegative", "{ .bools[-1] }", types, "false"));
-        data.Add(new JsonPathTestCase("boolSubSlice", "{ .bools[0:2] }", types, "true false"));
-        data.Add(new JsonPathTestCase("boolSubSliceFirst", "{ .bools[:2] }", types, "true false"));
-        data.Add(new JsonPathTestCase("boolSubSliceStep", "{ .bools[:4:2] }", types, "true true"));
-        data.Add(new JsonPathTestCase("integerSlice", "{ .integers }", types, "[1,2,3,4]"));
-        data.Add(new JsonPathTestCase("integerSliceIndex", "{ .integers[0] }", types, "1"));
-        data.Add(new JsonPathTestCase("integerSliceNegative", "{ .integers[-2] }", types, "3"));
-        data.Add(new JsonPathTestCase("integerSubSlice", "{ .integers[:2] }", types, "1 2"));
-        data.Add(new JsonPathTestCase("integerSubSliceStep", "{ .integers[:4:2] }", types, "1 3"));
-        data.Add(new JsonPathTestCase("floatSlice", "{ .floats }", types, "[1,2.2,3.3,4]"));
-        data.Add(new JsonPathTestCase("floatSliceIndex", "{ .floats[0] }", types, "1"));
-        data.Add(new JsonPathTestCase("floatSliceNegative", "{ .floats[-2] }", types, "3.3"));
-        data.Add(new JsonPathTestCase("floatSubSlice", "{ .floats[:2] }", types, "1 2.2"));
-        data.Add(new JsonPathTestCase("floatSubSliceStep", "{ .floats[:4:2] }", types, "1 3.3"));
-        data.Add(new JsonPathTestCase("stringSlice", "{ .strings }", types, "[\"one\",\"two\",\"three\",\"four\"]"));
-        data.Add(new JsonPathTestCase("stringSliceIndex", "{ .strings[0] }", types, "one"));
-        data.Add(new JsonPathTestCase("stringSliceNegative", "{ .strings[-2] }", types, "three"));
-        data.Add(new JsonPathTestCase("stringSubSlice", "{ .strings[:2] }", types, "one two"));
-        data.Add(new JsonPathTestCase("stringSubSliceStep", "{ .strings[:4:2] }", types, "one three"));
-        data.Add(new JsonPathTestCase("interfaceSlice", "{ .interfaces }", types, "[true,\"one\",1,1.1]"));
-        data.Add(new JsonPathTestCase("interfaceSliceIndex", "{ .interfaces[0] }", types, "true"));
-        data.Add(new JsonPathTestCase("interfaceSliceNegative", "{ .interfaces[-2] }", types, "1"));
-        data.Add(new JsonPathTestCase("interfaceSubSlice", "{ .interfaces[:2] }", types, "true one"));
-        data.Add(new JsonPathTestCase("interfaceSubSliceStep", "{ .interfaces[:4:2] }", types, "true 1"));
-        data.Add(new JsonPathTestCase("mapSlice", "{ .maps }", types,
-            "[{\"name\":\"one\",\"value\":1},{\"name\":\"two\",\"value\":2.02},{\"name\":\"three\",\"value\":3.03},{\"name\":\"four\",\"value\":4.04}]"));
-        data.Add(new JsonPathTestCase("mapSliceIndex", "{ .maps[0] }", types, "{\"name\":\"one\",\"value\":1}"));
-        data.Add(new JsonPathTestCase("mapSliceNegative", "{ .maps[-2] }", types, "{\"name\":\"three\",\"value\":3.03}"));
-        data.Add(new JsonPathTestCase("mapSubSlice", "{ .maps[:2] }", types, "{\"name\":\"one\",\"value\":1} {\"name\":\"two\",\"value\":2.02}"));
-        data.Add(new JsonPathTestCase("mapSubSliceStep", "{ .maps[::2] }", types, "{\"name\":\"one\",\"value\":1} {\"name\":\"three\",\"value\":3.03}"));
-        data.Add(new JsonPathTestCase("structSlice", "{ .structs }", types,
-            "[{\"name\":\"one\",\"value\":1,\"type\":\"integer\"},{\"name\":\"two\",\"value\":2.002,\"type\":\"float\"},{\"name\":\"three\",\"value\":3,\"type\":\"integer\"},{\"name\":\"four\",\"value\":4.004,\"type\":\"float\"}]"));
-        data.Add(new JsonPathTestCase("structSliceIndex", "{ .structs[0] }", types, "{\"name\":\"one\",\"value\":1,\"type\":\"integer\"}"));
-        data.Add(new JsonPathTestCase("structSliceNegative", "{ .structs[-2] }", types, "{\"name\":\"three\",\"value\":3,\"type\":\"integer\"}"));
-        data.Add(new JsonPathTestCase("structSubSlice", "{ .structs[:2] }", types,
-            "{\"name\":\"one\",\"value\":1,\"type\":\"integer\"} {\"name\":\"two\",\"value\":2.002,\"type\":\"float\"}"));
-        data.Add(new JsonPathTestCase("structSubSliceStep", "{ .structs[::2] }", types,
-            "{\"name\":\"one\",\"value\":1,\"type\":\"integer\"} {\"name\":\"three\",\"value\":3,\"type\":\"integer\"}"));
-
-        return data;
-    }
-
-    private static TheoryData<JsonPathTestCase> CreateStructInputData()
-    {
-        var store = CreateStore();
-
-        var data = new TheoryData<JsonPathTestCase>();
-        data.Add(new JsonPathTestCase("plain", "hello jsonpath", null, "hello jsonpath"));
-        data.Add(new JsonPathTestCase("recursive", "{..}", new[] { 1, 2, 3 }, "[1,2,3]"));
-        data.Add(new JsonPathTestCase("filter", "{[?(@<5)]}", new[] { 2, 6, 3, 7 }, "2 3"));
-        data.Add(new JsonPathTestCase("quote", "{\"{\"}", null, "{"));
-        data.Add(new JsonPathTestCase("union", "{[1,3,4]}", new[] { 0, 1, 2, 3, 4 }, "1 3 4"));
-        data.Add(new JsonPathTestCase("array", "{[0:2]}", new[] { "Monday", "Tuesday" }, "Monday Tuesday"));
-        data.Add(new JsonPathTestCase("variable", "hello {.Name}", store, "hello jsonpath"));
-        data.Add(new JsonPathTestCase("dict slash", "{$.Labels.web/html}", store, "15"));
-        data.Add(new JsonPathTestCase("dict index", "{$.Employees.jason}", store, "manager"));
-        data.Add(new JsonPathTestCase("dict index 2", "{$.Employees.dan}", store, "clerk"));
-        data.Add(new JsonPathTestCase("dict dash", "{.Labels.k8s-app}", store, "20"));
-        data.Add(new JsonPathTestCase("nested", "{.Bicycle[*].Color}", store, "red green"));
-        data.Add(new JsonPathTestCase("all authors", "{.Book[*].Author}", store, "Nigel Rees Evelyn Waugh Herman Melville"));
-        data.Add(new JsonPathTestCase("all fields", "{range .Bicycle[*]}{ \"{\" }{ @.* }{ \"} \" }{end}", store, "{red 19.95 true} {green 20.01 false} "));
-        data.Add(new JsonPathTestCase("recursive price", "{..Price}", store, "8.95 12.99 8.99 19.95 20.01"));
-        data.Add(new JsonPathTestCase("recursive dot price", "{...Price}", store, "8.95 12.99 8.99 19.95 20.01"));
-        data.Add(new JsonPathTestCase("super recursive", "{............................................................Price}", store, string.Empty, true));
-        data.Add(new JsonPathTestCase("all bicycles", "{.Bicycle}", store,
-            "[{\"Color\":\"red\",\"Price\":19.95,\"IsNew\":true},{\"Color\":\"green\",\"Price\":20.01,\"IsNew\":false}]"));
-        data.Add(new JsonPathTestCase("all struct", "{range .Bicycle[*]}{ @ }{ \" \" }{end}", store,
-            "{\"Color\":\"red\",\"Price\":19.95,\"IsNew\":true} {\"Color\":\"green\",\"Price\":20.01,\"IsNew\":false} "));
-        data.Add(new JsonPathTestCase("last array", "{.Book[-1:]}", store,
-            "{\"Category\":\"fiction\",\"Author\":\"Herman Melville\",\"Title\":\"Moby Dick\",\"Price\":8.99}"));
-        data.Add(new JsonPathTestCase("recursive array", "{..Book[2]}", store,
-            "{\"Category\":\"fiction\",\"Author\":\"Herman Melville\",\"Title\":\"Moby Dick\",\"Price\":8.99}"));
-        data.Add(new JsonPathTestCase("bool filter", "{.Bicycle[?(@.IsNew==true)]}", store,
-            "{\"Color\":\"red\",\"Price\":19.95,\"IsNew\":true}"));
-
-        return data;
-    }
-
-    private static TheoryData<JsonPathTestCase> CreateStructInputAllowMissingData()
-    {
-        var store = CreateStore();
-
-        var data = new TheoryData<JsonPathTestCase>();
-        data.Add(new JsonPathTestCase("missing", "{.hello}", store, string.Empty));
-        data.Add(new JsonPathTestCase("missing with text", "before-{.hello}after", store, "before-after"));
-        return data;
-    }
-
-    private static TheoryData<JsonPathTestCase> CreateStructInputFailureData()
-    {
-        var store = CreateStore();
-
-        var data = new TheoryData<JsonPathTestCase>();
-        data.Add(new JsonPathTestCase("invalid identifier", "{hello}", store, "unrecognized identifier", true));
-        data.Add(new JsonPathTestCase("missing field", "{.hello}", store, "is not found", true));
-        data.Add(new JsonPathTestCase("invalid array", "{.Labels[0]}", store, "is not array or slice", true));
-        data.Add(new JsonPathTestCase("invalid filter operator", "{.Book[?(@.Price<>10)]}", store, "unrecognized filter operator", true));
-        data.Add(new JsonPathTestCase("redundant end", "{range .Labels.*}{@}{end}{end}", store, "not in range", true));
-        return data;
-    }
-
-    private static TheoryData<JsonPathTestCase> CreateJsonInputData()
-    {
-        var json = """
+        return
         [
-            {"id": "i1", "x":4, "y":-5},
-            {"id": "i2", "x":-2, "y":-5, "z":1},
-            {"id": "i3", "x":8, "y":3},
-            {"id": "i4", "x":-6, "y":-1},
-            {"id": "i5", "x":0, "y":2, "z":1},
-            {"id": "i6", "x":1, "y":4},
-            {"id": "i7", "x":null, "y":4}
-        ]
-        """;
-
-        var document = JsonDocument.Parse(json);
-        var root = document.RootElement.Clone();
-
-        var data = new TheoryData<JsonPathTestCase>();
-        data.Add(new JsonPathTestCase("exists filter", "{[?(@.z)].id}", root, "i2 i5"));
-        data.Add(new JsonPathTestCase("bracket key", "{[0]['id']}", root, "i1"));
-        data.Add(new JsonPathTestCase("nil value", "{[-1]['x']}", root, "null"));
-        return data;
+            ["[?(@.stringValue==\"test1\")]", "test1", false],
+            ["[?(@.stringValue=='test1')]", "test1", false],
+        ];
     }
 
-    private static TheoryData<JsonPathTestCase> CreateKubernetesSampleData()
+    [Theory]
+    [MemberData(nameof(GetExpressionCollectionCases))]
+    public void GetExpressionCanFilterCollections(string jsonPath, object value, bool addNullChecks)
     {
-        var json = File.ReadAllText("TestData/kubernetes.json");
-        var document = JsonDocument.Parse(json);
-        var root = document.RootElement.Clone();
+        var expression = JsonPath.GetExpression<ExpressionTestObject[]>(jsonPath, addNullChecks);
 
-        var data = new TheoryData<JsonPathTestCase>();
-        data.Add(new JsonPathTestCase("range item", "{range .items[*]}{.metadata.name}, {end}{.kind}", root, "127.0.0.1, 127.0.0.2, List"));
-        data.Add(new JsonPathTestCase("range item with quote", "{range .items[*]}{.metadata.name}{\"\t\"}{end}", root, "127.0.0.1\t127.0.0.2\t"));
-        data.Add(new JsonPathTestCase("range addresses", "{.items[*].status.addresses[*].address}", root, "127.0.0.1 127.0.0.2 127.0.0.3"));
-        data.Add(new JsonPathTestCase("double range", "{range .items[*]}{range .status.addresses[*]}{.address}, {end}{end}", root,
-            "127.0.0.1, 127.0.0.2, 127.0.0.3, "));
-        data.Add(new JsonPathTestCase("item name", "{.items[*].metadata.name}", root, "127.0.0.1 127.0.0.2"));
-        data.Add(new JsonPathTestCase("union capacity", "{.items[*]['metadata.name', 'status.capacity']}", root,
-            "127.0.0.1 127.0.0.2 {\"cpu\":\"4\"} {\"cpu\":\"8\"}"));
-        data.Add(new JsonPathTestCase("range capacity", "{range .items[*]}[{.metadata.name}, {.status.capacity}] {end}", root,
-            "[127.0.0.1, {\"cpu\":\"4\"}] [127.0.0.2, {\"cpu\":\"8\"}] "));
-        data.Add(new JsonPathTestCase("user password", "{.users[?(@.name==\"e2e\")].user.password}", root, "secret"));
-        data.Add(new JsonPathTestCase("hostname", "{.items[0].metadata.labels.kubernetes\\.io/hostname}", root, "127.0.0.1"));
-        data.Add(new JsonPathTestCase("hostname filter", "{.items[?(@.metadata.labels.kubernetes\\.io/hostname==\"127.0.0.1\")].kind}", root, "None"));
-        data.Add(new JsonPathTestCase("bool item", "{.items[?(@..ready==true)].metadata.name}", root, "127.0.0.1"));
+        var items = Enumerable.Range(0, 10)
+            .Select(i => new ExpressionTestObject { stringValue = "test" + i })
+            .ToArray();
 
-        return data;
+        var result = expression.Compile()(items);
+
+        ((ExpressionTestObject)result).stringValue.ShouldBe((string)value);
     }
 
-    private static TheoryData<JsonPathTestCase> CreateKubernetesSampleSortedData()
+    public static IEnumerable<object[]> GetExpressionStringCases()
     {
-        var json = File.ReadAllText("TestData/kubernetes.json");
-        var document = JsonDocument.Parse(json);
-        var root = document.RootElement.Clone();
-
-        var data = new TheoryData<JsonPathTestCase>();
-        data.Add(new JsonPathTestCase("recursive name", "{..name}", root, "127.0.0.1 127.0.0.2 myself e2e"));
-        return data;
+        return
+        [
+            [".stringValue", Exp(x => (object)(x.stringValue!)), false],
+            [".intValue", Exp(x => x.intValue), false],
+            [".boolValue", Exp(x => x.boolValue), false],
+            [".decimalValue", Exp(x => x.decimalValue), false],
+            [".doubleValue", Exp(x => x.doubleValue), false],
+            [".subClass.Type", Exp(x => (object)(x.subClass.Type!)), false],
+            [".subClassList[?(@.Type==\"3\")].Status", Exp(x => (object)(x.subClassList.FirstOrDefault(y => y.Type == "3")!.Status!)), false],
+            [".subClassList[?(@.Nested.Name==\"Nested3\")].Status", Exp(x => (object)(x.subClassList.FirstOrDefault(y => y.Nested.Name == "Nested3")!.Status!)), false],
+            [".idictionary.key", "x => Convert(Convert(x.idictionary.get_Item(\"key\"), Object), Object)", false],
+            [".dictionary.key", "x => Convert(Convert(x.dictionary.get_Item(\"key\"), Object), Object)", false],
+            [".numbers[1]", Exp(x => x.numbers.ElementAt(1)), false],
+            [".stringValue", Exp(x => (object)(x.stringValue == null ? "" : x.stringValue)), true],
+            [".subClass.Type", Exp(x => (object)(x.subClass == null ? "" : x.subClass.Type == null ? "" : x.subClass.Type)), true],
+            [".subClass.Nested.Name", Exp(x => (object)(x.subClass == null ? "" : x.subClass.Nested == null ? "" : x.subClass.Nested.Name == null ? "" : x.subClass.Nested.Name)), true],
+        ];
     }
 
-    private static TheoryData<JsonPathTestCase> CreateEmptyRangeData()
+    [Theory]
+    [MemberData(nameof(GetExpressionStringCases))]
+    public void GetExpressionBuildsExpectedExpression(string jsonPath, string expected, bool addNullChecks)
     {
-        var document = JsonDocument.Parse("{\"items\":[]}");
-        var root = document.RootElement.Clone();
+        var expression = JsonPath.GetExpression<ExpressionTestObject>(jsonPath, addNullChecks);
 
-        var data = new TheoryData<JsonPathTestCase>();
-        data.Add(new JsonPathTestCase("empty range", "{range .items[*]}{.metadata.name}{end}", root, string.Empty));
-        data.Add(new JsonPathTestCase(
-            "empty nested range",
-            "{range .items[*]}{.metadata.name}{\":\"}{range @.spec.containers[*]}{.name}{\",\"}{end}{\"+\"}{end}",
-            root,
-            string.Empty));
-        return data;
+        expression.ToString().ShouldBe(expected);
     }
 
-    private static TheoryData<JsonPathTestCase> CreateNestedRangesData()
+    public static IEnumerable<object[]> GetNullCheckCases()
     {
-        var json = """
-        {
-          "items": [
-            {
-              "metadata": { "name": "pod1" },
-              "spec": {
-                "containers": [
-                  { "name": "foo", "another": [{ "name": "value1" }, { "name": "value2" }] },
-                  { "name": "bar", "another": [{ "name": "value1" }, { "name": "value2" }] }
-                ]
-              }
-            },
-            {
-              "metadata": { "name": "pod2" },
-              "spec": {
-                "containers": [
-                  { "name": "baz", "another": [{ "name": "value1" }, { "name": "value2" }] }
-                ]
-              }
-            }
-          ]
-        }
-        """;
-
-        var root = JsonDocument.Parse(json).RootElement.Clone();
-        var data = new TheoryData<JsonPathTestCase>();
-        data.Add(new JsonPathTestCase(
-            "nested range trailing newline",
-            "{range .items[*]}{.metadata.name}{\":\"}{range @.spec.containers[*]}{.name}{\",\"}{end}{\"+\"}{end}",
-            root,
-            "pod1:foo,bar,+pod2:baz,+"));
-        data.Add(new JsonPathTestCase(
-            "nested range within nested range",
-            "{range .items[*]}{.metadata.name}{\"~\"}{range @.spec.containers[*]}{.name}{\":\"}{range @.another[*]}{.name}{\",\"}{end}{\"+\"}{end}{\"#\"}{end}",
-            root,
-            "pod1~foo:value1,value2,+bar:value1,value2,+#pod2~baz:value1,value2,+#"));
-        data.Add(new JsonPathTestCase(
-            "two nested ranges same level",
-            "{range .items[*]}{.metadata.name}{\"\\t\"}{range @.spec.containers[*]}{.name}{\" \"}{end}{\"\\t\"}{range @.spec.containers[*]}{.name}{\" \"}{end}{\"\\n\"}{end}",
-            root,
-            "pod1\tfoo bar \tfoo bar \npod2\tbaz \tbaz \n"));
-        return data;
+        return
+        [
+            [Exp2(x => x.stringValue!), Exp(x => (object)(x.stringValue == null ? "" : x.stringValue))],
+            [Exp2(x => x.intValue), Exp(x => x.intValue)],
+            [Exp2(x => x.boolValue), Exp(x => x.boolValue)],
+            [Exp2(x => x.decimalValue), Exp(x => x.decimalValue)],
+            [Exp2(x => x.doubleValue), Exp(x => x.doubleValue)],
+            [Exp2(x => x.subClass.Type!), Exp(x => (object)(x.subClass == null ? "" : x.subClass.Type == null ? "" : x.subClass.Type))],
+            [Exp2(x => x.subClass.Nested.Name!), Exp(x => (object)(x.subClass == null ? "" : x.subClass.Nested == null ? "" : x.subClass.Nested.Name == null ? "" : x.subClass.Nested.Name))],
+            [Exp2(x => x.nullSubClassList!.FirstOrDefault(y => y.Type == "3")!.Status!), Exp(x => (object)(x.nullSubClassList == null ? "" : x.nullSubClassList.FirstOrDefault(y => y.Type == "3") == null ? "" : x.nullSubClassList.FirstOrDefault(y => y.Type == "3")!.Status == null ? "" : x.nullSubClassList.FirstOrDefault(y => y.Type == "3")!.Status!))],
+        ];
     }
 
-    private static TheoryData<JsonPathTestCase> CreateFilterPartialMatchesAllowMissingData()
+    [Theory]
+    [MemberData(nameof(GetNullCheckCases))]
+    public void CreateNullChecksBuildsExpectedExpression(Expression<Func<ExpressionTestObject, object>> queryExpression, string expected)
     {
-        var root = JsonDocument.Parse("""
-        {
-          "kind": "List",
-          "items": [
-            { "kind": "Pod", "metadata": { "name": "pod1", "annotations": { "color": "blue" } } },
-            { "kind": "Pod", "metadata": { "name": "pod2" } },
-            { "kind": "Pod", "metadata": { "name": "pod3", "annotations": { "color": "green" } } },
-            { "kind": "Pod", "metadata": { "name": "pod4", "annotations": { "color": "blue" } } }
-          ]
-        }
-        """).RootElement.Clone();
+        var expression = JsonPath.CreateNullChecks(queryExpression.Body);
+        var converted = Expression.Convert(expression, typeof(object));
+        var result = Expression.Lambda<Func<ExpressionTestObject, object>>(converted, queryExpression.Parameters);
 
-        var data = new TheoryData<JsonPathTestCase>();
-        data.Add(new JsonPathTestCase("filter partial allow missing", "{.items[?(@.metadata.annotations.color==\"blue\")].metadata.name}", root, "pod1 pod4"));
-        return data;
+        result.ToString().ShouldBe(expected);
     }
 
-    private static TheoryData<JsonPathTestCase> CreateFilterPartialMatchesStrictData()
+    [Fact]
+    public void NullCheckExpressionsCanBeUsedForOrdering()
     {
-        var root = JsonDocument.Parse("""
+        var items = new List<NullSortTestObject>
         {
-          "kind": "List",
-          "items": [
-            { "kind": "Pod", "metadata": { "name": "pod1", "annotations": { "color": "blue" } } },
-            { "kind": "Pod", "metadata": { "name": "pod2" } },
-            { "kind": "Pod", "metadata": { "name": "pod3", "annotations": { "color": "green" } } },
-            { "kind": "Pod", "metadata": { "name": "pod4", "annotations": { "color": "blue" } } }
-          ]
-        }
-        """).RootElement.Clone();
+            new() { Nested = new NestedSortObject { String = "one", Strings = [new CollectionSortObject { String = "coll1" }] } },
+            new() { Nested = new NestedSortObject { String = "two" } },
+            new(),
+        };
 
-        var data = new TheoryData<JsonPathTestCase>();
-        data.Add(new JsonPathTestCase("filter partial strict", "{.items[?(@.metadata.annotations.color==\"blue\")].metadata.name}", root, string.Empty, true));
-        return data;
+        var expression = JsonPath.GetExpression<NullSortTestObject>(".Nested.String", true);
+        _ = expression.ToString("Object notation", "C#");
+        items.AsQueryable().OrderBy(expression).ShouldNotBeEmpty();
+
+        var nestedExpression = JsonPath.GetExpression<NullSortTestObject>(".Nested.Strings[?(@.String==\"two\")].String", true);
+        _ = nestedExpression.ToString("Object notation", "C#");
+        items.AsQueryable().OrderBy(nestedExpression).ShouldNotBeEmpty();
     }
 
-    private static TheoryData<JsonPathTestCase> CreateNegativeIndexData()
+    [Fact]
+    public void GetExpressionRejectsMultipleRootActions()
     {
-        var root = JsonDocument.Parse("""
-        { "spec": { "containers": [
-          { "name": "fake0" }, { "name": "fake1" }, { "name": "fake2" }, { "name": "fake3" }
-        ] } }
-        """).RootElement.Clone();
-        var data = new TheoryData<JsonPathTestCase>();
-        data.Add(new JsonPathTestCase("containers 0", "{.spec.containers[0].name}", root, "fake0"));
-        data.Add(new JsonPathTestCase("containers 0:0", "{.spec.containers[0:0].name}", root, string.Empty));
-        data.Add(new JsonPathTestCase("containers 0:-1", "{.spec.containers[0:-1].name}", root, "fake0 fake1 fake2"));
-        data.Add(new JsonPathTestCase("containers -1:0", "{.spec.containers[-1:0].name}", root, string.Empty, true));
-        data.Add(new JsonPathTestCase("containers -1", "{.spec.containers[-1].name}", root, "fake3"));
-        data.Add(new JsonPathTestCase("containers -1:", "{.spec.containers[-1:].name}", root, "fake3"));
-        data.Add(new JsonPathTestCase("containers -2", "{.spec.containers[-2].name}", root, "fake2"));
-        data.Add(new JsonPathTestCase("containers -2:", "{.spec.containers[-2:].name}", root, "fake2 fake3"));
-        data.Add(new JsonPathTestCase("containers -3", "{.spec.containers[-3].name}", root, "fake1"));
-        data.Add(new JsonPathTestCase("containers -4", "{.spec.containers[-4].name}", root, "fake0"));
-        data.Add(new JsonPathTestCase("containers -4:", "{.spec.containers[-4:].name}", root, "fake0 fake1 fake2 fake3"));
-        data.Add(new JsonPathTestCase("containers -5", "{.spec.containers[-5].name}", root, string.Empty, true));
-        data.Add(new JsonPathTestCase("containers 5:5", "{.spec.containers[5:5].name}", root, string.Empty));
-        data.Add(new JsonPathTestCase("containers -5:-5", "{.spec.containers[-5:-5].name}", root, string.Empty));
-        data.Add(new JsonPathTestCase("containers 3:1", "{.spec.containers[3:1].name}", root, string.Empty, true));
-        data.Add(new JsonPathTestCase("containers -1:-2", "{.spec.containers[-1:-2].name}", root, string.Empty, true));
-        return data;
+        var exception = Assert.Throws<NotSupportedException>(() => JsonPath.GetExpression<SimpleHost>("{.Name}{.Count}"));
+        Assert.Contains("single root action", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static TheoryData<JsonPathTestCase> CreateRunningPodsJsonOutputData()
+    [Fact]
+    public void GetExpressionConvertsResultToRequestedReturnType()
     {
-        var root = JsonDocument.Parse("""
-        {
-          "kind": "List",
-          "items": [
-            { "kind": "Pod", "metadata": { "name": "pod1" }, "status": { "phase": "Running" } },
-            { "kind": "Pod", "metadata": { "name": "pod2" }, "status": { "phase": "Running" } },
-            { "kind": "Pod", "metadata": { "name": "pod3" }, "status": { "phase": "Running" } },
-            { "resourceVersion": "" }
-          ]
-        }
-        """).RootElement.Clone();
+        var expression = JsonPath.GetExpression<ArrayHost, double>(".Numbers[1]");
+        var result = expression.Compile()(new ArrayHost { Numbers = [3, 5, 7] });
 
-        var data = new TheoryData<JsonPathTestCase>();
-        data.Add(new JsonPathTestCase("running pods", "{range .items[?(.status.phase==\"Running\")]}{.metadata.name}{\" is Running\\n\"}{end}", root,
-            "pod1 is Running\npod2 is Running\npod3 is Running\n"));
-        return data;
+        Assert.Equal(5d, result);
     }
 
-    private static TheoryData<JsonPathTestCase> CreateStepData()
+    [Fact]
+    public void GenerateRejectsNullNode()
     {
-        var root = JsonDocument.Parse("""
-        { "spec": { "containers": [
-          { "name": "fake0" }, { "name": "fake1" }, { "name": "fake2" },
-          { "name": "fake3" }, { "name": "fake4" }, { "name": "fake5" }
-        ] } }
-        """).RootElement.Clone();
-
-        var data = new TheoryData<JsonPathTestCase>();
-        data.Add(new JsonPathTestCase("step 0:", "{.spec.containers[0:].name}", root, "fake0 fake1 fake2 fake3 fake4 fake5"));
-        data.Add(new JsonPathTestCase("step 0:6:", "{.spec.containers[0:6:].name}", root, "fake0 fake1 fake2 fake3 fake4 fake5"));
-        data.Add(new JsonPathTestCase("step 0:6:1", "{.spec.containers[0:6:1].name}", root, "fake0 fake1 fake2 fake3 fake4 fake5"));
-        data.Add(new JsonPathTestCase("step 0:6:0", "{.spec.containers[0:6:0].name}", root, string.Empty, true));
-        data.Add(new JsonPathTestCase("step 0:6:-1", "{.spec.containers[0:6:-1].name}", root, string.Empty, true));
-        data.Add(new JsonPathTestCase("step 1:4:2", "{.spec.containers[1:4:2].name}", root, "fake1 fake3"));
-        data.Add(new JsonPathTestCase("step 1:4:3", "{.spec.containers[1:4:3].name}", root, "fake1"));
-        data.Add(new JsonPathTestCase("step 1:4:4", "{.spec.containers[1:4:4].name}", root, "fake1"));
-        data.Add(new JsonPathTestCase("step 0:6:2", "{.spec.containers[0:6:2].name}", root, "fake0 fake2 fake4"));
-        data.Add(new JsonPathTestCase("step 0:6:3", "{.spec.containers[0:6:3].name}", root, "fake0 fake3"));
-        data.Add(new JsonPathTestCase("step 0:6:5", "{.spec.containers[0:6:5].name}", root, "fake0 fake5"));
-        data.Add(new JsonPathTestCase("step 0:6:6", "{.spec.containers[0:6:6].name}", root, "fake0"));
-        return data;
+        Assert.Throws<ArgumentNullException>(() => JsonPath.Generate(null!));
     }
 
-    public readonly record struct JsonPathTestOptions(bool AllowMissingKeys, bool SortResults);
-
-    private static string EvaluateTemplate(string template, object? input, JsonPathTestOptions options)
+    [Theory]
+    [MemberData(nameof(GetUnsupportedNodeCases))]
+    public void GenerateRejectsUnsupportedNodes(INode node, string messageFragment)
     {
-        var parser = Parser.Parse("jsonpath", template);
-        return EvaluateTemplateNodes(parser.Root.Nodes, 0, parser.Root.Nodes.Count, input, options);
+        var exception = Assert.Throws<NotSupportedException>(() => JsonPath.Generate(node));
+        Assert.Contains(messageFragment, exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string EvaluateTemplateNodes(
-        IReadOnlyList<INode> nodes,
-        int start,
-        int end,
-        object? current,
-        JsonPathTestOptions options)
+    public static TheoryData<INode, string> GetUnsupportedNodeCases()
     {
-        var output = new StringBuilder();
-
-        for (var i = start; i < end; i++)
+        return new TheoryData<INode, string>
         {
-            var node = nodes[i];
-
-            if (node is TextNode textNode)
-            {
-                output.Append(textNode.Text);
-                continue;
-            }
-
-            if (node is not ListNode listNode)
-            {
-                throw new JsonPathEvaluationException($"unsupported root node type '{node.Type}'");
-            }
-
-            if (TryGetIdentifier(listNode, out var identifier))
-            {
-                if (identifier == "range")
-                {
-                    var rangeEndIndex = FindRangeEnd(nodes, i + 1, end);
-                    var values = EvaluatePath(listNode.Nodes.Skip(1).ToArray(), [current], options.AllowMissingKeys);
-
-                    foreach (var value in values)
-                    {
-                        output.Append(EvaluateTemplateNodes(nodes, i + 1, rangeEndIndex, value, options));
-                    }
-
-                    i = rangeEndIndex;
-                    continue;
-                }
-
-                if (identifier == "end")
-                {
-                    throw new JsonPathEvaluationException("not in range");
-                }
-
-                throw new JsonPathEvaluationException($"unrecognized identifier {identifier}");
-            }
-
-            var results = EvaluatePath(listNode.Nodes, [current], options.AllowMissingKeys);
-            output.Append(FormatResults(results, options.SortResults));
-        }
-
-        return output.ToString();
-    }
-
-    private static int FindRangeEnd(IReadOnlyList<INode> nodes, int start, int end)
-    {
-        var depth = 0;
-
-        for (var i = start; i < end; i++)
-        {
-            if (nodes[i] is not ListNode listNode || !TryGetIdentifier(listNode, out var identifier))
-            {
-                continue;
-            }
-
-            if (identifier == "range")
-            {
-                depth++;
-                continue;
-            }
-
-            if (identifier != "end")
-            {
-                continue;
-            }
-
-            if (depth == 0)
-            {
-                return i;
-            }
-
-            depth--;
-        }
-
-        throw new JsonPathEvaluationException("unterminated range");
-    }
-
-    private static bool TryGetIdentifier(ListNode listNode, out string identifier)
-    {
-        if (listNode.Nodes.Count > 0 && listNode.Nodes[0] is IdentifierNode identifierNode)
-        {
-            identifier = identifierNode.Name;
-            return true;
-        }
-
-        identifier = string.Empty;
-        return false;
-    }
-
-    private static List<object?> EvaluatePath(
-        IReadOnlyList<INode> nodes,
-        List<object?> currentValues,
-        bool allowMissingKeys)
-    {
-        var results = currentValues;
-
-        for (var i = 0; i < nodes.Count; i++)
-        {
-            var node = nodes[i];
-            switch (node)
-            {
-                case ListNode listNode:
-                    results = EvaluatePath(listNode.Nodes, results, allowMissingKeys);
-                    break;
-                case FieldNode fieldNode:
-                    results = ApplyField(results, fieldNode.Value, allowMissingKeys);
-                    break;
-                case ArrayNode arrayNode:
-                    results = ApplyArray(results, arrayNode, allowMissingKeys);
-                    break;
-                case FilterNode filterNode:
-                    results = ApplyFilter(results, filterNode, allowMissingKeys);
-                    break;
-                case WildcardNode:
-                    results = ApplyWildcard(results);
-                    break;
-                case RecursiveNode:
-                    if (i < nodes.Count - 1)
-                    {
-                        results = ApplyRecursive(results);
-                    }
-
-                    break;
-                case UnionNode unionNode:
-                    results = ApplyUnion(results, unionNode, allowMissingKeys);
-                    break;
-                case TextNode textNode:
-                    results = [textNode.Text];
-                    break;
-                case IntNode intNode:
-                    results = [intNode.Value];
-                    break;
-                case FloatNode floatNode:
-                    results = [floatNode.Value];
-                    break;
-                case BoolNode boolNode:
-                    results = [boolNode.Value];
-                    break;
-                case IdentifierNode identifierNode:
-                    throw new JsonPathEvaluationException($"unrecognized identifier {identifierNode.Name}");
-                default:
-                    throw new JsonPathEvaluationException($"unsupported node type '{node.Type}'");
-            }
-        }
-
-        return results;
-    }
-
-    private static List<object?> ApplyField(IEnumerable<object?> values, string fieldName, bool allowMissingKeys)
-    {
-        var results = new List<object?>();
-
-        foreach (var value in values)
-        {
-            if (TryGetFieldValue(value, fieldName, out var fieldValue))
-            {
-                results.Add(fieldValue);
-                continue;
-            }
-
-            if (!allowMissingKeys)
-            {
-                throw new JsonPathEvaluationException($"field '{fieldName}' is not found");
-            }
-        }
-
-        return results;
-    }
-
-    private static bool TryGetFieldValue(object? source, string fieldName, out object? value)
-    {
-        if (source is null)
-        {
-            value = null;
-            return false;
-        }
-
-        if (source is JsonElement element)
-        {
-            if (element.ValueKind == JsonValueKind.Object)
-            {
-                if (element.TryGetProperty(fieldName, out var property))
-                {
-                    value = property.Clone();
-                    return true;
-                }
-
-                foreach (var candidate in element.EnumerateObject())
-                {
-                    if (!string.Equals(candidate.Name, fieldName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    value = candidate.Value.Clone();
-                    return true;
-                }
-            }
-
-            value = null;
-            return false;
-        }
-
-        if (source is IDictionary dictionary)
-        {
-            if (dictionary.Contains(fieldName))
-            {
-                value = dictionary[fieldName];
-                return true;
-            }
-
-            value = null;
-            return false;
-        }
-
-        const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase;
-        var sourceType = source.GetType();
-
-        var propertyInfo = sourceType.GetProperty(fieldName, flags);
-        if (propertyInfo != null && propertyInfo.GetIndexParameters().Length == 0)
-        {
-            value = propertyInfo.GetValue(source);
-            return true;
-        }
-
-        var fieldInfo = sourceType.GetField(fieldName, flags);
-        if (fieldInfo != null)
-        {
-            value = fieldInfo.GetValue(source);
-            return true;
-        }
-
-        foreach (var candidateProperty in sourceType.GetProperties(BindingFlags.Instance | BindingFlags.Public))
-        {
-            if (candidateProperty.GetIndexParameters().Length != 0)
-            {
-                continue;
-            }
-
-            var jsonName = candidateProperty.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name;
-            if (!string.Equals(jsonName, fieldName, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            value = candidateProperty.GetValue(source);
-            return true;
-        }
-
-        value = null;
-        return false;
-    }
-
-    private static List<object?> ApplyArray(IEnumerable<object?> values, ArrayNode arrayNode, bool allowMissingKeys)
-    {
-        var results = new List<object?>();
-
-        foreach (var value in values)
-        {
-            if (value is null)
-            {
-                if (allowMissingKeys)
-                {
-                    continue;
-                }
-
-                throw new JsonPathEvaluationException("null is not array or slice");
-            }
-
-            if (!TryEnumerateSequence(value, out var sequence))
-            {
-                throw new JsonPathEvaluationException($"{value.GetType().Name} is not array or slice");
-            }
-
-            results.AddRange(SelectArrayItems(sequence, arrayNode));
-        }
-
-        return results;
-    }
-
-    private static bool TryEnumerateSequence(object value, out List<object?> sequence)
-    {
-        if (value is JsonElement element)
-        {
-            if (element.ValueKind == JsonValueKind.Array)
-            {
-                sequence = new List<object?>();
-                foreach (var arrayItem in element.EnumerateArray())
-                {
-                    sequence.Add(arrayItem.Clone());
-                }
-
-                return true;
-            }
-
-            sequence = [];
-            return false;
-        }
-
-        if (value is string || value is IDictionary || value is not IEnumerable enumerable)
-        {
-            sequence = [];
-            return false;
-        }
-
-        sequence = new List<object?>();
-        foreach (var item in enumerable)
-        {
-            sequence.Add(item);
-        }
-
-        return true;
-    }
-
-    private static List<object?> SelectArrayItems(List<object?> values, ArrayNode arrayNode)
-    {
-        if (arrayNode.Params.Length != 3)
-        {
-            throw new JsonPathEvaluationException("invalid array expression");
-        }
-
-        var first = arrayNode.Params[0];
-        var second = arrayNode.Params[1];
-        var third = arrayNode.Params[2];
-        var length = values.Count;
-
-        var singleIndex = first.Known && second.Known && second.Derived && !third.Known;
-        if (singleIndex)
-        {
-            var index = ResolveIndex(first.Value, length);
-            if (index < 0 || index >= length)
-            {
-                throw new JsonPathEvaluationException("array index is out of bounds");
-            }
-
-            return [values[index]];
-        }
-
-        var step = third.Known ? third.Value : 1;
-        if (step <= 0)
-        {
-            throw new JsonPathEvaluationException("step must be greater than zero");
-        }
-
-        var start = first.Known ? ResolveIndex(first.Value, length) : 0;
-        var end = second.Known ? ResolveIndex(second.Value, length) : length;
-        start = Math.Clamp(start, 0, length);
-        end = Math.Clamp(end, 0, length);
-
-        if (start > end)
-        {
-            throw new JsonPathEvaluationException("start index cannot be greater than end index");
-        }
-
-        var items = new List<object?>();
-        for (var i = start; i < end; i += step)
-        {
-            items.Add(values[i]);
-        }
-
-        return items;
-    }
-
-    private static int ResolveIndex(int value, int length) =>
-        value < 0 ? length + value : value;
-
-    private static List<object?> ApplyFilter(IEnumerable<object?> values, FilterNode filterNode, bool allowMissingKeys)
-    {
-        var results = new List<object?>();
-
-        foreach (var value in values)
-        {
-            if (value is null)
-            {
-                if (allowMissingKeys)
-                {
-                    continue;
-                }
-
-                throw new JsonPathEvaluationException("null is not array or slice");
-            }
-
-            if (!TryEnumerateSequence(value, out var candidates))
-            {
-                throw new JsonPathEvaluationException($"{value.GetType().Name} is not array or slice");
-            }
-
-            foreach (var candidate in candidates)
-            {
-                if (MatchesFilter(candidate, filterNode, allowMissingKeys))
-                {
-                    results.Add(candidate);
-                }
-            }
-        }
-
-        return results;
-    }
-
-    private static bool MatchesFilter(object? candidate, FilterNode filterNode, bool allowMissingKeys)
-    {
-        if (filterNode.Operator == "exists")
-        {
-            var leftExists = EvaluatePath(filterNode.Left.Nodes, [candidate], true);
-            return leftExists.Count > 0;
-        }
-
-        if (!IsSupportedFilterOperator(filterNode.Operator))
-        {
-            throw new JsonPathEvaluationException($"unrecognized filter operator {filterNode.Operator}");
-        }
-
-        var leftValues = EvaluatePath(filterNode.Left.Nodes, [candidate], allowMissingKeys);
-        var rightValues = EvaluatePath(filterNode.Right.Nodes, [candidate], allowMissingKeys);
-
-        if (leftValues.Count == 0 || rightValues.Count == 0)
-        {
-            if (allowMissingKeys)
-            {
-                return false;
-            }
-
-            throw new JsonPathEvaluationException("field is not found");
-        }
-
-        foreach (var leftValue in leftValues)
-        {
-            foreach (var rightValue in rightValues)
-            {
-                if (CompareFilterValues(leftValue, rightValue, filterNode.Operator))
-                {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    private static bool IsSupportedFilterOperator(string @operator) =>
-        @operator is "==" or "!=" or "<" or ">" or "<=" or ">=";
-
-    private static bool CompareFilterValues(object? left, object? right, string @operator)
-    {
-        left = NormalizeValue(left);
-        right = NormalizeValue(right);
-
-        var comparison = CompareNormalizedValues(left, right);
-        return @operator switch
-        {
-            "==" => comparison == 0,
-            "!=" => comparison != 0,
-            "<" => comparison < 0,
-            ">" => comparison > 0,
-            "<=" => comparison <= 0,
-            ">=" => comparison >= 0,
-            _ => throw new JsonPathEvaluationException($"unrecognized filter operator {@operator}")
+            { new WildcardNode(), "Wildcard" },
+            { new RecursiveNode(), "Recursive descent" },
+            { new UnionNode([]), "Union" },
+            { new UnsupportedNode(), "Node type" },
+            { new IdentifierNode("missing"), "Identifier node" },
         };
     }
 
-    private static object? NormalizeValue(object? value)
+    [Fact]
+    public void GenerateSupportsScalarNodes()
     {
-        if (value is not JsonElement element)
-        {
-            return value;
-        }
+        Assert.Equal("hello", Expression.Lambda<Func<string>>(JsonPath.Generate(new TextNode("hello"))).Compile()());
+        Assert.True(Expression.Lambda<Func<bool>>(JsonPath.Generate(new BoolNode(true))).Compile()());
+        Assert.Equal(12, Expression.Lambda<Func<int>>(JsonPath.Generate(new IntNode(12))).Compile()());
+        Assert.Equal(2.5d, Expression.Lambda<Func<double>>(JsonPath.Generate(new FloatNode(2.5))).Compile()());
+        Assert.Null(Expression.Lambda<Func<object?>>(Expression.Convert(JsonPath.Generate(new IdentifierNode("null")), typeof(object))).Compile()());
+    }
 
-        return element.ValueKind switch
+    [Fact]
+    public void GenerateThrowsForMissingFieldOnTypedSource()
+    {
+        var exception = Assert.Throws<NotSupportedException>(() => JsonPath.GetExpression<SimpleHost>(".Missing"));
+        Assert.Contains("was not found", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void GenerateCanReadFieldBackedMember()
+    {
+        var expression = JsonPath.GetExpression<FieldHost, int>(".Count");
+        var result = expression.Compile()(new FieldHost { Count = 42 });
+
+        Assert.Equal(42, result);
+    }
+
+    [Fact]
+    public void GenerateCanReadLateBoundMemberThroughJsonPropertyName()
+    {
+        var expression = JsonPath.GetExpression<object>(".renamed");
+        var result = expression.Compile()(new RenamedPropertyHost { ActualName = "value" });
+
+        Assert.Equal("value", result);
+    }
+
+    [Fact]
+    public void GenerateCanReadGenericDictionaryWithConvertedKey()
+    {
+        var expression = JsonPath.GetExpression<Dictionary<int, string>, string>("['42']");
+        var result = expression.Compile()(new Dictionary<int, string> { [42] = "answer" });
+
+        Assert.Equal("answer", result);
+    }
+
+    [Fact]
+    public void GenerateCanReadGenericDictionaryInterfaceWithConvertedKey()
+    {
+        var expression = JsonPath.GetExpression<IDictionary<int, string>, string>("['7']");
+        var result = expression.Compile()(new Dictionary<int, string> { [7] = "seven" });
+
+        Assert.Equal("seven", result);
+    }
+
+    [Fact]
+    public void GenerateFallsBackForUnconvertibleGenericDictionaryKey()
+    {
+        var expression = JsonPath.GetExpression<Dictionary<int, string>>("['nope']");
+        var compiled = expression.Compile();
+
+        Assert.Null(compiled(new Dictionary<int, string> { [1] = "one" }));
+    }
+
+    [Theory]
+    [InlineData(".Name[0:2]", "single array index")]
+    [InlineData(".Name[-1]", "Negative indexes")]
+    public void GenerateRejectsUnsupportedArrayOperations(string jsonPath, string messageFragment)
+    {
+        var exception = Assert.Throws<NotSupportedException>(() => JsonPath.GetExpression<SimpleHost>(jsonPath));
+        Assert.Contains(messageFragment, exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void GenerateRejectsArrayParametersWithUnexpectedLength()
+    {
+        var exception = Assert.Throws<NotSupportedException>(() =>
+            JsonPath.GenerateArray(new ArrayNode([new ParamsEntry(true, 1, false)]), Expression.Parameter(typeof(int[]), "x")));
+
+        Assert.Contains("Array parameters are not supported.", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GenerateCanIndexIntoTypedEnumerable()
+    {
+        var expression = JsonPath.GetExpression<ArrayHost, string>(".Names[2]");
+        var result = expression.Compile()(new ArrayHost { Names = ["a", "b", "c"] });
+
+        Assert.Equal("c", result);
+    }
+
+    [Fact]
+    public void GenerateRejectsArrayIndexingNonEnumerableSource()
+    {
+        var exception = Assert.Throws<NotSupportedException>(() => JsonPath.GetExpression<SimpleHost>(".Count[0]"));
+        Assert.Contains("is not enumerable", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void GenerateFilterRejectsNonEnumerableTypedSource()
+    {
+        var exception = Assert.Throws<NotSupportedException>(() => JsonPath.GetExpression<SimpleHost>(".Name[?(@==\"a\")]"));
+        Assert.Contains("cannot be filtered", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void GenerateFilterExistsTreatsNonNullableValuesAsPresent()
+    {
+        var expression = JsonPath.GetExpression<FilterExistsHost, int>(".Items[?(@.Id)].Id");
+        var result = expression.Compile()(new FilterExistsHost
         {
-            JsonValueKind.String => element.GetString(),
-            JsonValueKind.Number => element.TryGetInt64(out var asInt64) ? asInt64 :
-                element.TryGetDecimal(out var asDecimal) ? asDecimal :
-                element.GetDouble(),
-            JsonValueKind.True => true,
-            JsonValueKind.False => false,
-            JsonValueKind.Null => null,
-            JsonValueKind.Undefined => null,
-            _ => element.GetRawText()
+            Items =
+            [
+                new FilterExistsItem { Id = 3 },
+                new FilterExistsItem { Id = 4 },
+            ]
+        });
+
+        Assert.Equal(3, result);
+    }
+
+    [Fact]
+    public void GenerateFilterRejectsUnknownOperator()
+    {
+        var exception = Assert.Throws<NotSupportedException>(() => JsonPath.GetExpression<FilterExistsHost>(".Items[?(@.Id<>1)]"));
+        Assert.Contains("Filter operator", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CreateNullChecksRejectsNullExpression()
+    {
+        Assert.Throws<ArgumentNullException>(() => JsonPath.CreateNullChecks(null!));
+    }
+
+    [Fact]
+    public void CreateNullChecksLeavesValueTypeExpressionUnchanged()
+    {
+        Expression<Func<SimpleHost, int>> source = x => x.Count;
+        var result = JsonPath.CreateNullChecks(source.Body);
+
+        Assert.Equal(source.Body.ToString(), result.ToString());
+    }
+
+    [Fact]
+    public void ListNodeReplaceNodesReplacesCollection()
+    {
+        var node = new ListNode();
+        node.Append(new TextNode("before"));
+        node.ReplaceNodes([new FieldNode("after")]);
+
+        Assert.Single(node.Nodes);
+        Assert.Equal("Field: after", node.Nodes[0].ToString());
+    }
+
+    [Fact]
+    public void ParamsEntryToStringReflectsDerivedState()
+    {
+        Assert.Equal("5 (derived)", new ParamsEntry(true, 5, true).ToString());
+        Assert.Equal("?", new ParamsEntry(false, 0, false).ToString());
+    }
+
+    [Theory]
+    [InlineData((byte)1)]
+    [InlineData((sbyte)1)]
+    [InlineData((short)1)]
+    [InlineData((ushort)1)]
+    [InlineData(1)]
+    [InlineData((uint)1)]
+    [InlineData((long)1)]
+    [InlineData((ulong)1)]
+    [InlineData(1.125f)]
+    [InlineData(1.25d)]
+    [InlineData("1.5")]
+    public void TryConvertToDecimalHandlesSupportedValues(object value)
+    {
+        var converted = JsonPath.TryConvertToDecimal(value, out var result);
+
+        Assert.True(converted);
+        Assert.NotEqual(default, result);
+    }
+
+    [Fact]
+    public void TryConvertToDecimalRejectsUnsupportedValue()
+    {
+        var converted = JsonPath.TryConvertToDecimal(new object(), out var result);
+
+        Assert.False(converted);
+        Assert.Equal(default, result);
+    }
+
+    [Fact]
+    public void AlignComparisonTypesHandlesNullAndNumericConversions()
+    {
+        var nullableLeft = Expression.Parameter(typeof(string), "left");
+        var nullableRight = Expression.Parameter(typeof(string), "right");
+        var nullObject = Expression.Constant(null, typeof(object));
+
+        var rightNullAligned = JsonPath.AlignComparisonTypes(nullableLeft, nullObject);
+        Assert.Equal(typeof(string), rightNullAligned.Right.Type);
+        Assert.Null(((ConstantExpression)rightNullAligned.Right).Value);
+
+        var leftNullAligned = JsonPath.AlignComparisonTypes(nullObject, nullableRight);
+        Assert.Equal(typeof(string), leftNullAligned.Left.Type);
+        Assert.Null(((ConstantExpression)leftNullAligned.Left).Value);
+
+        var rightConverted = JsonPath.AlignComparisonTypes(Expression.Parameter(typeof(double), "d"), Expression.Constant(1));
+        Assert.Equal(typeof(double), rightConverted.Right.Type);
+
+        var leftConverted = JsonPath.AlignComparisonTypes(Expression.Constant("a"), Expression.Parameter(typeof(object), "o"));
+        Assert.Equal(typeof(object), leftConverted.Left.Type);
+    }
+
+    [Fact]
+    public void BuildFilterComparisonHandlesSupportedOperatorsAndDynamicValues()
+    {
+        Assert.IsAssignableFrom<BinaryExpression>(JsonPath.BuildFilterComparison(Expression.Constant(1), Expression.Constant(1), "=="));
+        Assert.IsAssignableFrom<BinaryExpression>(JsonPath.BuildFilterComparison(Expression.Constant(1), Expression.Constant(2), "!="));
+        Assert.IsAssignableFrom<BinaryExpression>(JsonPath.BuildFilterComparison(Expression.Constant(1), Expression.Constant(2), "<"));
+        Assert.IsAssignableFrom<BinaryExpression>(JsonPath.BuildFilterComparison(Expression.Constant(2), Expression.Constant(1), ">"));
+        Assert.IsAssignableFrom<BinaryExpression>(JsonPath.BuildFilterComparison(Expression.Constant(1), Expression.Constant(2), "<="));
+        Assert.IsAssignableFrom<BinaryExpression>(JsonPath.BuildFilterComparison(Expression.Constant(2), Expression.Constant(1), ">="));
+        Assert.IsAssignableFrom<MethodCallExpression>(JsonPath.BuildFilterComparison(Expression.Parameter(typeof(object), "o"), Expression.Constant(1), "=="));
+        Assert.Throws<NotSupportedException>(() => JsonPath.BuildFilterComparison(Expression.Constant(1), Expression.Constant(1), "<>"));
+    }
+
+    [Fact]
+    public void KeyAndEnumerableHelpersHandleEdgeCases()
+    {
+        Assert.True(JsonPath.TryConvertStringKey("value", typeof(string), out var stringKey));
+        Assert.Equal("value", stringKey);
+
+        Assert.True(JsonPath.TryConvertStringKey("12", typeof(int), out var intKey));
+        Assert.Equal(12, intKey);
+
+        Assert.False(JsonPath.TryConvertStringKey("nope", typeof(Guid), out _));
+
+        Assert.Null(JsonPath.GetEnumerableElementType(typeof(string)));
+        Assert.Equal(typeof(int), JsonPath.GetEnumerableElementType(typeof(int[])));
+        Assert.Equal(typeof(int), JsonPath.GetEnumerableElementType(typeof(IEnumerable<int>)));
+        Assert.Equal(typeof(int), JsonPath.GetEnumerableElementType(typeof(List<int>)));
+
+        var enumerableParameter = Expression.Parameter(typeof(IEnumerable<int>), "items");
+        Assert.Same(enumerableParameter, JsonPath.EnsureEnumerable(enumerableParameter, typeof(int)));
+
+        var arrayListParameter = Expression.Parameter(typeof(ArrayList), "items");
+        var ensuredConverted = JsonPath.EnsureEnumerable(arrayListParameter, typeof(int));
+        Assert.Equal(typeof(IEnumerable<int>), ensuredConverted.Type);
+        Assert.IsAssignableFrom<UnaryExpression>(ensuredConverted);
+
+        Assert.True(JsonPath.CanConvert(typeof(int), typeof(double)));
+        Assert.True(JsonPath.CanConvert(typeof(string), typeof(string)));
+        Assert.True(JsonPath.CanConvert(typeof(int?), typeof(double?)));
+        Assert.False(JsonPath.CanConvert(typeof(string), typeof(Guid)));
+    }
+
+    [Fact]
+    public void PrivateHelpersCoverClrAndDynamicPaths()
+    {
+        var customEnumerable = new CustomEnumerable("a", "b", "c");
+
+        Assert.Null(JsonPath.GetLateBoundMember(null, "Value"));
+        Assert.Equal("yes", JsonPath.GetLateBoundMember(new Hashtable { ["flag"] = "yes" }, "flag"));
+        Assert.Null(JsonPath.GetLateBoundMember(new Hashtable(), "missing"));
+        Assert.Equal("name", JsonPath.GetLateBoundMember(new SimpleHost { Name = "name" }, "Name"));
+        Assert.Equal(11, JsonPath.GetLateBoundMember(new FieldHost { Count = 11 }, "Count"));
+        Assert.Equal("renamed", JsonPath.GetLateBoundMember(new RenamedPropertyHost { ActualName = "renamed" }, "renamed"));
+
+        Assert.Null(JsonPath.GetDynamicArrayIndex(null, 0));
+        Assert.Equal("b", JsonPath.GetDynamicArrayIndex(customEnumerable, 1));
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(() => JsonPath.GetDynamicArrayIndex(customEnumerable, 5));
+        Assert.ThrowsAny<NotSupportedException>(() => JsonPath.GetDynamicArrayIndex("abc", 0));
+        Assert.ThrowsAny<NotSupportedException>(() => JsonPath.GetDynamicArrayIndex(new Hashtable(), 0));
+
+        Assert.Empty(ToList(JsonPath.EnumerateDynamic(null)));
+        Assert.Equal(["a", "b", "c"], ToList(JsonPath.EnumerateDynamic(customEnumerable)));
+        Assert.ThrowsAny<NotSupportedException>(() => ToList(JsonPath.EnumerateDynamic("abc")));
+        Assert.ThrowsAny<NotSupportedException>(() => ToList(JsonPath.EnumerateDynamic(new Hashtable())));
+
+        Assert.True(JsonPath.CompareDynamicValues(2, 1, ">"));
+        Assert.True(JsonPath.CompareDynamicValues(2, 3, "<="));
+        Assert.True(JsonPath.CompareDynamicValues(true, false, "!="));
+        Assert.ThrowsAny<NotSupportedException>(() => JsonPath.CompareDynamicValues(1, 1, "<>"));
+
+        Assert.Equal(0, JsonPath.CompareNormalizedValues(null, null));
+        Assert.Equal(-1, JsonPath.CompareNormalizedValues(null, 1));
+        Assert.Equal(1, JsonPath.CompareNormalizedValues(1, null));
+        Assert.Equal(0, JsonPath.CompareNormalizedValues("1.5", 1.5m));
+        Assert.True(JsonPath.CompareNormalizedValues(true, false) > 0);
+        Assert.True(JsonPath.CompareNormalizedValues("abc", "abd") < 0);
+    }
+
+    private static string Exp(Expression<Func<ExpressionTestObject, object>> exp) => exp.ToString();
+
+    private static Expression<Func<ExpressionTestObject, object>> Exp2(Expression<Func<ExpressionTestObject, object>> exp) => exp;
+
+    private static List<object?> ToList(IEnumerable<object?> source) => [.. source];
+
+    private sealed class UnsupportedNode : INode
+    {
+        public NodeType Type => (NodeType)999;
+    }
+
+    private sealed class SimpleHost
+    {
+        public string Name { get; init; } = string.Empty;
+
+        public int Count { get; init; }
+    }
+
+    private sealed class ArrayHost
+    {
+        public int[] Numbers { get; init; } = [];
+
+        public List<string> Names { get; init; } = [];
+    }
+
+    private sealed class FieldHost
+    {
+        public int Count;
+    }
+
+    private sealed class RenamedPropertyHost
+    {
+        [JsonPropertyName("renamed")]
+        public string ActualName { get; init; } = string.Empty;
+    }
+
+    private sealed class FilterExistsHost
+    {
+        public List<FilterExistsItem> Items { get; init; } = [];
+    }
+
+    private sealed class FilterExistsItem
+    {
+        public int Id { get; init; }
+    }
+
+    public sealed class ExpressionTestObject
+    {
+        public string? stringValue { get; set; } = "TestString";
+        public int intValue { get; set; } = 7;
+        public bool boolValue { get; set; }
+        public decimal decimalValue { get; set; } = 18.4M;
+        public double doubleValue { get; set; } = 12.23;
+        public ExpressionSubObject subClass { get; set; } = new();
+        public List<ExpressionSubObject> subClassList { get; set; } = [];
+        public List<ExpressionSubObject>? nullSubClassList { get; set; }
+        public List<int> numbers { get; set; } = [];
+        public IDictionary<string, string> idictionary { get; set; } = new Dictionary<string, string>
+        {
+            ["key"] = "value",
+            ["crossplane.io/external-name"] = "value1",
+        };
+        public Dictionary<string, string> dictionary { get; set; } = new()
+        {
+            ["key"] = "value",
+            ["crossplane.io/external-name"] = "value1",
         };
     }
 
-    private static int CompareNormalizedValues(object? left, object? right)
+    public sealed class ExpressionSubObject
     {
-        if (left is null && right is null)
-        {
-            return 0;
-        }
-
-        if (left is null)
-        {
-            return -1;
-        }
-
-        if (right is null)
-        {
-            return 1;
-        }
-
-        if (TryConvertToDecimal(left, out var leftDecimal) && TryConvertToDecimal(right, out var rightDecimal))
-        {
-            return leftDecimal.CompareTo(rightDecimal);
-        }
-
-        if (left is bool leftBool && right is bool rightBool)
-        {
-            return leftBool.CompareTo(rightBool);
-        }
-
-        var leftText = Convert.ToString(left, CultureInfo.InvariantCulture) ?? string.Empty;
-        var rightText = Convert.ToString(right, CultureInfo.InvariantCulture) ?? string.Empty;
-        return string.Compare(leftText, rightText, StringComparison.Ordinal);
+        public string? Type { get; set; } = "Type1";
+        public string? Status { get; set; } = "Status1";
+        public int intValue { get; set; } = 7;
+        public bool boolValue { get; set; }
+        public decimal decimalValue { get; set; } = 18.4M;
+        public double doubleValue { get; set; } = 12.23;
+        public ExpressionNestedObject Nested { get; set; } = new();
     }
 
-    private static bool TryConvertToDecimal(object value, out decimal result)
+    public sealed class ExpressionNestedObject
     {
-        switch (value)
-        {
-            case byte byteValue:
-                result = byteValue;
-                return true;
-            case sbyte sbyteValue:
-                result = sbyteValue;
-                return true;
-            case short shortValue:
-                result = shortValue;
-                return true;
-            case ushort ushortValue:
-                result = ushortValue;
-                return true;
-            case int intValue:
-                result = intValue;
-                return true;
-            case uint uintValue:
-                result = uintValue;
-                return true;
-            case long longValue:
-                result = longValue;
-                return true;
-            case ulong ulongValue:
-                result = ulongValue;
-                return true;
-            case float floatValue:
-                result = (decimal)floatValue;
-                return true;
-            case double doubleValue:
-                result = (decimal)doubleValue;
-                return true;
-            case decimal decimalValue:
-                result = decimalValue;
-                return true;
-            case string text when decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed):
-                result = parsed;
-                return true;
-            default:
-                result = default;
-                return false;
-        }
+        public string Name { get; set; } = "Test3";
     }
 
-    private static List<object?> ApplyWildcard(IEnumerable<object?> values)
+    public sealed class NullSortTestObject
     {
-        var results = new List<object?>();
-
-        foreach (var value in values)
-        {
-            results.AddRange(ExpandWildcardValues(value));
-        }
-
-        return results;
+        public NestedSortObject? Nested { get; set; }
     }
 
-    private static List<object?> ApplyRecursive(IEnumerable<object?> values)
+    public sealed class NestedSortObject
     {
-        var results = new List<object?>();
-
-        foreach (var value in values)
-        {
-            results.Add(value);
-            CollectDescendants(value, results);
-        }
-
-        return results;
+        public string String { get; set; } = string.Empty;
+        public List<CollectionSortObject> Strings { get; set; } = [];
     }
 
-    private static void CollectDescendants(object? value, List<object?> values)
+    public sealed class CollectionSortObject
     {
-        foreach (var child in ExpandWildcardValues(value))
-        {
-            values.Add(child);
-            CollectDescendants(child, values);
-        }
+        public string String { get; set; } = string.Empty;
     }
 
-    private static List<object?> ApplyUnion(List<object?> values, UnionNode unionNode, bool allowMissingKeys)
+    private sealed class CustomEnumerable(params object?[] values) : IEnumerable<object?>
     {
-        var results = new List<object?>();
-        foreach (var childPath in unionNode.Nodes)
-        {
-            results.AddRange(EvaluatePath(childPath.Nodes, [.. values], allowMissingKeys));
-        }
+        public IEnumerator<object?> GetEnumerator() => ((IEnumerable<object?>)values).GetEnumerator();
 
-        return results;
-    }
-
-    private static IEnumerable<object?> ExpandWildcardValues(object? value)
-    {
-        if (value is null)
-        {
-            yield break;
-        }
-
-        if (value is JsonElement element)
-        {
-            if (element.ValueKind == JsonValueKind.Object)
-            {
-                foreach (var property in element.EnumerateObject())
-                {
-                    yield return property.Value.Clone();
-                }
-            }
-            else if (element.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in element.EnumerateArray())
-                {
-                    yield return item.Clone();
-                }
-            }
-
-            yield break;
-        }
-
-        if (value is IDictionary dictionary)
-        {
-            foreach (DictionaryEntry entry in dictionary)
-            {
-                yield return entry.Value;
-            }
-
-            yield break;
-        }
-
-        if (value is IEnumerable enumerable and not string)
-        {
-            foreach (var item in enumerable)
-            {
-                yield return item;
-            }
-
-            yield break;
-        }
-
-        var valueType = value.GetType();
-        if (IsSimpleType(valueType))
-        {
-            yield break;
-        }
-
-        var properties = valueType
-            .GetProperties(BindingFlags.Instance | BindingFlags.Public)
-            .Where(x => x.GetIndexParameters().Length == 0)
-            .OrderBy(x => x.MetadataToken);
-        foreach (var property in properties)
-        {
-            yield return property.GetValue(value);
-        }
-
-        var fields = valueType
-            .GetFields(BindingFlags.Instance | BindingFlags.Public)
-            .OrderBy(x => x.MetadataToken);
-        foreach (var field in fields)
-        {
-            yield return field.GetValue(value);
-        }
-    }
-
-    private static bool IsSimpleType(Type type)
-    {
-        var coreType = Nullable.GetUnderlyingType(type) ?? type;
-        return coreType.IsPrimitive ||
-               coreType.IsEnum ||
-               coreType == typeof(string) ||
-               coreType == typeof(decimal) ||
-               coreType == typeof(DateTime) ||
-               coreType == typeof(DateTimeOffset) ||
-               coreType == typeof(Guid) ||
-               coreType == typeof(TimeSpan);
-    }
-
-    private static string FormatResults(List<object?> values, bool sortResults)
-    {
-        if (values.Count == 0)
-        {
-            return string.Empty;
-        }
-
-        var formatted = values.Select(FormatValue).ToList();
-        if (sortResults)
-        {
-            formatted.Sort(StringComparer.Ordinal);
-        }
-
-        return string.Join(" ", formatted);
-    }
-
-    private static string FormatValue(object? value)
-    {
-        if (value is null)
-        {
-            return "null";
-        }
-
-        if (value is JsonElement element)
-        {
-            return element.ValueKind switch
-            {
-                JsonValueKind.String => element.GetString() ?? string.Empty,
-                JsonValueKind.Number => element.GetRawText(),
-                JsonValueKind.True => "true",
-                JsonValueKind.False => "false",
-                JsonValueKind.Null => "null",
-                JsonValueKind.Undefined => "null",
-                _ => JsonSerializer.Serialize(element)
-            };
-        }
-
-        if (value is string stringValue)
-        {
-            return stringValue;
-        }
-
-        if (value is bool boolValue)
-        {
-            return boolValue ? "true" : "false";
-        }
-
-        if (IsNumericType(value.GetType()))
-        {
-            return Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
-        }
-
-        return JsonSerializer.Serialize(value);
-    }
-
-    private static bool IsNumericType(Type type)
-    {
-        var coreType = Nullable.GetUnderlyingType(type) ?? type;
-        return coreType == typeof(byte) ||
-               coreType == typeof(sbyte) ||
-               coreType == typeof(short) ||
-               coreType == typeof(ushort) ||
-               coreType == typeof(int) ||
-               coreType == typeof(uint) ||
-               coreType == typeof(long) ||
-               coreType == typeof(ulong) ||
-               coreType == typeof(float) ||
-               coreType == typeof(double) ||
-               coreType == typeof(decimal);
-    }
-
-    private sealed class JsonPathEvaluationException : Exception
-    {
-        public JsonPathEvaluationException(string message)
-            : base(message)
-        {
-        }
-    }
-
-    private static Store CreateStore() => new()
-    {
-        Name = "jsonpath",
-        Book = new List<Book>
-        {
-            new("reference", "Nigel Rees", "Sayings of the Centurey", 8.95f),
-            new("fiction", "Evelyn Waugh", "Sword of Honour", 12.99f),
-            new("fiction", "Herman Melville", "Moby Dick", 8.99f),
-        },
-        Bicycle = new List<Bicycle>
-        {
-            new("red", 19.95f, true),
-            new("green", 20.01f, false),
-        },
-        Labels = new Dictionary<string, int>
-        {
-            ["engieer"] = 10,
-            ["web/html"] = 15,
-            ["k8s-app"] = 20,
-        },
-        Employees = new Dictionary<string, string>
-        {
-            ["jason"] = "manager",
-            ["dan"] = "clerk",
-        },
-    };
-
-    private record TestStruct([property: JsonPropertyName("name")] string Name,
-        [property: JsonPropertyName("value")] object Value,
-        [property: JsonPropertyName("type")] string Type);
-
-    private record Book(
-        [property: JsonPropertyName("Category")] string Category,
-        [property: JsonPropertyName("Author")] string Author,
-        [property: JsonPropertyName("Title")] string Title,
-        [property: JsonPropertyName("Price")] float Price);
-
-    private record Bicycle(
-        [property: JsonPropertyName("Color")] string Color,
-        [property: JsonPropertyName("Price")] float Price,
-        [property: JsonPropertyName("IsNew")] bool IsNew);
-
-    private sealed class Store
-    {
-        [JsonPropertyName("Book")] public List<Book> Book { get; init; } = new();
-        [JsonPropertyName("Bicycle")] public List<Bicycle> Bicycle { get; init; } = new();
-        [JsonPropertyName("Name")] public string Name { get; init; } = string.Empty;
-        [JsonPropertyName("Labels")] public Dictionary<string, int> Labels { get; init; } = new();
-        [JsonPropertyName("Employees")] public Dictionary<string, string> Employees { get; init; } = new();
+        IEnumerator IEnumerable.GetEnumerator() => values.GetEnumerator();
     }
 }
