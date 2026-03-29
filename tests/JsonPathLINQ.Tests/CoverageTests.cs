@@ -170,6 +170,23 @@ public class CoverageTests
     }
 
     [Fact]
+    public void GenerateFilterSupportsJsonDocumentSource()
+    {
+        var expression = JsonPathLINQ.GetExpression<DocumentFilterHost, string>(".Document[?(@.ready==true)].name");
+        var result = expression.Compile()(new DocumentFilterHost
+        {
+            Document = JsonDocument.Parse("""
+                [
+                  { "name": "one", "ready": false },
+                  { "name": "two", "ready": true }
+                ]
+                """)
+        });
+
+        Assert.Equal("two", result);
+    }
+
+    [Fact]
     public void GenerateFilterRejectsUnknownOperator()
     {
         var exception = Assert.Throws<NotSupportedException>(() => JsonPathLINQ.GetExpression<FilterExistsHost>(".Items[?(@.Id<>1)]"));
@@ -424,9 +441,49 @@ public class CoverageTests
         Assert.Equal(typeof(int), JsonPathLINQ.GetEnumerableElementType(typeof(IEnumerable<int>)));
         Assert.Equal(typeof(int), JsonPathLINQ.GetEnumerableElementType(typeof(List<int>)));
 
+        var enumerableParameter = Expression.Parameter(typeof(IEnumerable<int>), "items");
+        var ensuredDirect = JsonPathLINQ.EnsureEnumerable(enumerableParameter, typeof(int));
+        Assert.Same(enumerableParameter, ensuredDirect);
+
+        var arrayListParameter = Expression.Parameter(typeof(ArrayList), "items");
+        var ensuredConverted = JsonPathLINQ.EnsureEnumerable(arrayListParameter, typeof(int));
+        Assert.Equal(typeof(IEnumerable<int>), ensuredConverted.Type);
+        Assert.IsAssignableFrom<UnaryExpression>(ensuredConverted);
+
         Assert.True(JsonPathLINQ.CanConvert(typeof(int), typeof(double)));
         Assert.True(JsonPathLINQ.CanConvert(typeof(string), typeof(string)));
+        Assert.True(JsonPathLINQ.CanConvert(typeof(int?), typeof(double?)));
         Assert.False(JsonPathLINQ.CanConvert(typeof(string), typeof(Guid)));
+    }
+
+    [Fact]
+    public void ParseActionParsesListRoot()
+    {
+        var parser = Parser.ParseAction("ok", ".Name");
+
+        var field = Assert.IsType<FieldNode>(Assert.Single(parser.Root.Nodes));
+        Assert.Equal("Name", field.Value);
+    }
+
+    [Theory]
+    [InlineData("{.Name", "unclosed action")]
+    [InlineData("{+}", "cannot parse number")]
+    [InlineData("{.Name[abc]}", "invalid array index")]
+    [InlineData("{\"unterminated}", "unterminated quoted string")]
+    public void ParserCoversAdditionalFailureCases(string text, string messageFragment)
+    {
+        var exception = Assert.Throws<JsonPathParseException>(() => Parser.Parse("extra", text));
+        Assert.Contains(messageFragment, exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ParserParsesTabWhitespaceAndAtRoot()
+    {
+        var parser = Parser.Parse("tab", "{\t@.Name}");
+
+        var root = Assert.IsType<ListNode>(Assert.Single(parser.Root.Nodes));
+        var field = Assert.IsType<FieldNode>(Assert.Single(root.Nodes));
+        Assert.Equal("Name", field.Value);
     }
 
     private static List<object?> ToList(IEnumerable<object?> source) => [.. source];
@@ -464,6 +521,11 @@ public class CoverageTests
     private sealed class FilterExistsHost
     {
         public List<FilterExistsItem> Items { get; init; } = [];
+    }
+
+    private sealed class DocumentFilterHost
+    {
+        public JsonDocument Document { get; init; } = JsonDocument.Parse("[]");
     }
 
     private sealed class FilterExistsItem
