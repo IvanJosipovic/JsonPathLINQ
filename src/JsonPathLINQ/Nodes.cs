@@ -10,6 +10,7 @@ public enum NodeType
     Field,
     Identifier,
     Filter,
+    Predicate,
     Int,
     Float,
     Wildcard,
@@ -91,6 +92,27 @@ public sealed class FilterNode : INode
     }
 
     public override string ToString() => $"{Type}: {Left} {Operator} {Right}";
+}
+
+public abstract record FilterExpression;
+
+public sealed record FilterComparisonExpression(FilterExpression Left, string Operator, FilterExpression Right) : FilterExpression;
+
+public sealed record FilterLogicalExpression(FilterExpression Left, string Operator, FilterExpression Right) : FilterExpression;
+
+public sealed record FilterPathExpression(ListNode Path) : FilterExpression;
+
+public sealed record FilterLiteralExpression(object? Value) : FilterExpression;
+
+public sealed class PredicateNode : INode
+{
+    public NodeType Type => NodeType.Predicate;
+
+    public FilterExpression Expression { get; }
+
+    public PredicateNode(FilterExpression expression) => Expression = expression;
+
+    public override string ToString() => $"{Type}: {Expression}";
 }
 
 public sealed class IntNode : INode

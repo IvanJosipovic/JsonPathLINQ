@@ -63,6 +63,36 @@ public static class JsonPath
     {
         ArgumentException.ThrowIfNullOrEmpty(jsonPath);
 
+        if (jsonPath[0] == '$')
+        {
+            var rp = RfcJsonPathParser.Parse(jsonPath);
+            if (rp.Root.Nodes.Count != 1)
+            {
+                throw new NotSupportedException("Only a single root action is supported.");
+            }
+
+            var rfcParameter = Expression.Parameter(typeof(T), "x");
+            Expression rfcBody = Generate(rp.Root.Nodes[0], rfcParameter);
+            rfcBody = NormalizeTerminalExpression(rfcBody);
+
+            if (addNullChecks)
+            {
+                rfcBody = CreateNullChecks(rfcBody);
+            }
+
+            if (typeof(TResult) == typeof(object))
+            {
+                rfcBody = Expression.Convert(rfcBody, typeof(object));
+            }
+            else if (rfcBody.Type != typeof(TResult))
+            {
+                rfcBody = Expression.Convert(rfcBody, typeof(TResult));
+            }
+
+            return Expression.Lambda<Func<T, TResult>>(rfcBody, rfcParameter);
+        }
+
+        var parameter = Expression.Parameter(typeof(T), "x");
         if (jsonPath[0] != '{')
         {
             jsonPath = '{' + jsonPath;
@@ -73,14 +103,12 @@ public static class JsonPath
             jsonPath += '}';
         }
 
-        var jp = Parser.Parse("query", jsonPath);
-
+        var jp = LegacyJsonPathAdapter.Parse("query", jsonPath);
         if (jp.Root.Nodes.Count != 1)
         {
             throw new NotSupportedException("Only a single root action is supported.");
         }
 
-        var parameter = Expression.Parameter(typeof(T), "x");
         Expression body = Generate(jp.Root.Nodes[0], parameter);
         body = NormalizeTerminalExpression(body);
 
@@ -140,6 +168,7 @@ public static class JsonPath
             ListNode listNode => GenerateList(listNode, current),
             FieldNode fieldNode => GenerateField(fieldNode, current),
             FilterNode filterNode => GenerateFilter(filterNode, current),
+            PredicateNode predicateNode => GeneratePredicateFilter(predicateNode, current),
             ArrayNode arrayNode => GenerateArray(arrayNode, current),
             TextNode textNode => Expression.Constant(textNode.Text),
             BoolNode boolNode => Expression.Constant(boolNode.Value),
@@ -285,6 +314,58 @@ public static class JsonPath
             EnumerableFirstOrDefaultWithPredicate.MakeGenericMethod(elementType),
             enumerable,
             predicate);
+    }
+
+    private static Expression GeneratePredicateFilter(PredicateNode node, Expression source)
+    {
+        if (source.Type == typeof(JsonDocument))
+        {
+            return GeneratePredicateFilter(node, Expression.Property(source, nameof(JsonDocument.RootElement)));
+        }
+
+        Expression enumerable;
+        Type elementType;
+        if (RequiresDynamicEnumeration(source.Type))
+        {
+            elementType = typeof(object);
+            enumerable = Expression.Call(EnumerateDynamicMethod, Expression.Convert(source, typeof(object)));
+        }
+        else
+        {
+            elementType = GetEnumerableElementType(source.Type) ?? throw new NotSupportedException($"'{source.Type}' is not enumerable and cannot be filtered.");
+            enumerable = EnsureEnumerable(source, elementType);
+        }
+
+        var parameter = Expression.Parameter(elementType, "y");
+        var predicateBody = GeneratePredicateExpression(node.Expression, parameter);
+        var predicate = Expression.Lambda(predicateBody, parameter);
+
+        return Expression.Call(
+            EnumerableFirstOrDefaultWithPredicate.MakeGenericMethod(elementType),
+            enumerable,
+            predicate);
+    }
+
+    private static Expression GeneratePredicateExpression(FilterExpression expression, Expression current)
+    {
+        return expression switch
+        {
+            FilterComparisonExpression comparison => BuildFilterComparison(GeneratePredicateOperand(comparison.Left, current), GeneratePredicateOperand(comparison.Right, current), comparison.Operator),
+            FilterLogicalExpression logical => logical.Operator == "&&"
+                ? Expression.AndAlso(GeneratePredicateExpression(logical.Left, current), GeneratePredicateExpression(logical.Right, current))
+                : Expression.OrElse(GeneratePredicateExpression(logical.Left, current), GeneratePredicateExpression(logical.Right, current)),
+            _ => throw new NotSupportedException($"Filter expression '{expression.GetType().Name}' is not supported.")
+        };
+    }
+
+    private static Expression GeneratePredicateOperand(FilterExpression expression, Expression current)
+    {
+        return expression switch
+        {
+            FilterPathExpression path => Generate(path.Path, current),
+            FilterLiteralExpression literal => Expression.Constant(literal.Value, literal.Value?.GetType() ?? typeof(object)),
+            _ => throw new NotSupportedException($"Filter operand '{expression.GetType().Name}' is not supported.")
+        };
     }
 
     internal static Expression BuildFilterComparison(Expression left, Expression right, string @operator)

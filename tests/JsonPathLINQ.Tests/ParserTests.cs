@@ -219,12 +219,12 @@ public sealed class ParserTests
     [MemberData(nameof(ParserCases))]
     public void ParserCasesFromClientGo(ParserTestCase testCase)
     {
-        Parser? parser = null;
+        LegacyJsonPathAdapter? parser = null;
         Exception? error = null;
 
         try
         {
-            parser = Parser.Parse(testCase.Name, testCase.Text);
+            parser = LegacyJsonPathAdapter.Parse(testCase.Name, testCase.Text);
         }
         catch (Exception ex)
         {
@@ -256,7 +256,7 @@ public sealed class ParserTests
         Exception? error = null;
         try
         {
-            _ = Parser.Parse(testCase.Name, testCase.Text);
+            _ = LegacyJsonPathAdapter.Parse(testCase.Name, testCase.Text);
         }
         catch (Exception ex)
         {
@@ -273,7 +273,7 @@ public sealed class ParserTests
     [InlineData("'plain'", "plain")]
     public void UnquoteExtendParsesEscapes(string input, string expected)
     {
-        Assert.Equal(expected, Parser.UnquoteExtend(input));
+        Assert.Equal(expected, LegacyJsonPathAdapter.UnquoteExtend(input));
     }
 
     [Theory]
@@ -285,7 +285,7 @@ public sealed class ParserTests
     [InlineData("\"abc\\\"")]
     public void UnquoteExtendRejectsInvalidInput(string input)
     {
-        Assert.ThrowsAny<Exception>(() => Parser.UnquoteExtend(input));
+        Assert.ThrowsAny<Exception>(() => LegacyJsonPathAdapter.UnquoteExtend(input));
     }
 
     [Fact]
@@ -300,7 +300,7 @@ public sealed class ParserTests
     [Fact]
     public void ParseActionParsesListRoot()
     {
-        var parser = Parser.ParseAction("ok", ".Name");
+        var parser = LegacyJsonPathAdapter.ParseAction("ok", ".Name");
 
         var field = Assert.IsType<FieldNode>(Assert.Single(parser.Root.Nodes));
         Assert.Equal("Name", field.Value);
@@ -313,14 +313,14 @@ public sealed class ParserTests
     [InlineData("{\"unterminated}", "unterminated quoted string")]
     public void ParserCoversAdditionalFailureCases(string text, string messageFragment)
     {
-        var exception = Assert.Throws<JsonPathParseException>(() => Parser.Parse("extra", text));
+        var exception = Assert.Throws<JsonPathParseException>(() => LegacyJsonPathAdapter.Parse("extra", text));
         Assert.Contains(messageFragment, exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void ParserParsesTabWhitespaceAndAtRoot()
     {
-        var parser = Parser.Parse("tab", "{\t@.Name}");
+        var parser = LegacyJsonPathAdapter.Parse("tab", "{\t@.Name}");
 
         var root = Assert.IsType<ListNode>(Assert.Single(parser.Root.Nodes));
         var field = Assert.IsType<FieldNode>(Assert.Single(root.Nodes));

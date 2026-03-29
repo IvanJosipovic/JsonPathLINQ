@@ -12,7 +12,7 @@ internal static class JsonPathTemplateEvaluator
 {
     public static string Evaluate(string template, object? input, bool allowMissingKeys, bool sortResults)
     {
-        var parser = Parser.Parse("jsonpath", template);
+        var parser = LegacyJsonPathAdapter.Parse("jsonpath", template);
         return EvaluateNodes(parser.Root.Nodes, 0, parser.Root.Nodes.Count, input, allowMissingKeys, sortResults);
     }
 
