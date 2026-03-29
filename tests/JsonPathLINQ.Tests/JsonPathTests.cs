@@ -393,6 +393,10 @@ public sealed class JsonPathTests
 
         var leftConverted = JsonPath.AlignComparisonTypes(Expression.Constant("a"), Expression.Parameter(typeof(object), "o"));
         Assert.Equal(typeof(object), leftConverted.Left.Type);
+
+        var unchanged = JsonPath.AlignComparisonTypes(Expression.Constant("a"), Expression.Constant(DateTime.UnixEpoch));
+        Assert.Equal(typeof(string), unchanged.Left.Type);
+        Assert.Equal(typeof(DateTime), unchanged.Right.Type);
     }
 
     [Fact]
@@ -442,13 +446,16 @@ public sealed class JsonPathTests
     public void PrivateHelpersCoverClrAndDynamicPaths()
     {
         var customEnumerable = new CustomEnumerable("a", "b", "c");
+        var exactDictionary = (IDictionary)new Hashtable { ["exact"] = "value" };
 
         Assert.Null(JsonPath.GetLateBoundMember(null, "Value"));
         Assert.Equal("yes", JsonPath.GetLateBoundMember(new Hashtable { ["flag"] = "yes" }, "flag"));
         Assert.Null(JsonPath.GetLateBoundMember(new Hashtable(), "missing"));
+        Assert.Equal("value", JsonPath.GetLateBoundMember(exactDictionary, "exact"));
         Assert.Equal("name", JsonPath.GetLateBoundMember(new SimpleHost { Name = "name" }, "Name"));
         Assert.Equal(11, JsonPath.GetLateBoundMember(new FieldHost { Count = 11 }, "Count"));
         Assert.Equal("renamed", JsonPath.GetLateBoundMember(new RenamedPropertyHost { ActualName = "renamed" }, "renamed"));
+        Assert.Null(JsonPath.GetLateBoundMember(new NoMatchHost(), "missing"));
 
         Assert.Null(JsonPath.GetDynamicArrayIndex(null, 0));
         Assert.Equal("b", JsonPath.GetDynamicArrayIndex(customEnumerable, 1));
@@ -464,6 +471,8 @@ public sealed class JsonPathTests
         Assert.True(JsonPath.CompareDynamicValues(2, 1, ">"));
         Assert.True(JsonPath.CompareDynamicValues(2, 3, "<="));
         Assert.True(JsonPath.CompareDynamicValues(true, false, "!="));
+        Assert.True(JsonPath.CompareDynamicValues(1, 2, "<"));
+        Assert.True(JsonPath.CompareDynamicValues(2, 2, ">="));
         Assert.ThrowsAny<NotSupportedException>(() => JsonPath.CompareDynamicValues(1, 1, "<>"));
 
         Assert.Equal(0, JsonPath.CompareNormalizedValues(null, null));
@@ -472,6 +481,33 @@ public sealed class JsonPathTests
         Assert.Equal(0, JsonPath.CompareNormalizedValues("1.5", 1.5m));
         Assert.True(JsonPath.CompareNormalizedValues(true, false) > 0);
         Assert.True(JsonPath.CompareNormalizedValues("abc", "abd") < 0);
+    }
+
+    [Fact]
+    public void CreateNullChecksHandlesInstanceMethodAndIndexerExpressions()
+    {
+        Expression<Func<IndexableHost, object>> methodExpression = x => x.Child!.ToString()!;
+        var methodResult = Expression.Lambda<Func<IndexableHost, object>>(
+            Expression.Convert(JsonPath.CreateNullChecks(methodExpression.Body), typeof(object)),
+            methodExpression.Parameters);
+        methodResult.Compile()(new IndexableHost()).ShouldBe(string.Empty);
+
+        Expression<Func<IndexableHost, object>> indexExpression = x => x.Values!["name"]!;
+        var indexResult = Expression.Lambda<Func<IndexableHost, object>>(
+            Expression.Convert(JsonPath.CreateNullChecks(indexExpression.Body), typeof(object)),
+            indexExpression.Parameters);
+        indexResult.Compile()(new IndexableHost()).ShouldBe(string.Empty);
+    }
+
+    [Fact]
+    public void CreateNullChecksStripsConvertCheckedObjectWrapper()
+    {
+        var parameter = Expression.Parameter(typeof(int), "x");
+        var wrapped = Expression.ConvertChecked(Expression.Convert(parameter, typeof(object)), typeof(object));
+
+        var result = JsonPath.CreateNullChecks(wrapped);
+
+        Assert.Equal("x", result.ToString());
     }
 
     private static string Exp(Expression<Func<ExpressionTestObject, object>> exp) => exp.ToString();
@@ -508,6 +544,18 @@ public sealed class JsonPathTests
     {
         [JsonPropertyName("renamed")]
         public string ActualName { get; init; } = string.Empty;
+    }
+
+    private sealed class NoMatchHost
+    {
+        public string Value { get; init; } = string.Empty;
+    }
+
+    private sealed class IndexableHost
+    {
+        public object? Child { get; init; }
+
+        public Dictionary<string, string?>? Values { get; init; }
     }
 
     private sealed class FilterExistsHost

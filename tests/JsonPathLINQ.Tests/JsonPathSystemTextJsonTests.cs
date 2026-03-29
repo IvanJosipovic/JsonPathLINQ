@@ -66,6 +66,51 @@ public sealed class JsonPathSystemTextJsonTests
     }
 
     [Fact]
+    public void GetExpressionSupportsJsonDocumentRootPaths()
+    {
+        var document = JsonDocument.Parse("""
+            {
+              "name": "doc",
+              "items": [
+                { "value": "one", "ready": false },
+                { "value": "two", "ready": true }
+              ]
+            }
+            """);
+
+        var fieldExpression = JsonPath.GetExpression<JsonDocument>(".name");
+        fieldExpression.Compile()(document).ShouldBe("doc");
+
+        var arrayExpression = JsonPath.GetExpression<JsonDocument>(".items[1].value");
+        arrayExpression.Compile()(document).ShouldBe("two");
+
+        var filterExpression = JsonPath.GetExpression<JsonDocument>(".items[?(@.ready==true)].value");
+        filterExpression.Compile()(document).ShouldBe("two");
+    }
+
+    [Fact]
+    public void GetExpressionSupportsJsonNodeRootsAndTerminalNormalization()
+    {
+        var node = JsonNode.Parse("""
+            {
+              "name": "node",
+              "count": 3,
+              "items": [ "a", "b" ]
+            }
+            """)!;
+
+        var fieldExpression = JsonPath.GetExpression<JsonObject>(".name");
+        fieldExpression.Compile()(node.AsObject()).ShouldBe("node");
+
+        var terminalExpression = JsonPath.GetExpression<NodeHost>(".Node");
+        var terminalResult = terminalExpression.Compile()(new NodeHost { Node = node.AsObject() });
+        terminalResult.ShouldBeOfType<JsonObject>();
+
+        var documentTerminal = JsonPath.GetExpression<DocumentTerminalHost>(".Document");
+        documentTerminal.Compile()(new DocumentTerminalHost { Document = JsonDocument.Parse("42") }).ShouldBe(42);
+    }
+
+    [Fact]
     public void GetExpressionWithNullChecksReturnsNullForMissingJsonPath()
     {
         var expression = JsonPath.GetExpression<JsonElement>(".subClass.missing.value", true);
@@ -118,12 +163,15 @@ public sealed class JsonPathSystemTextJsonTests
         Assert.Equal(7, JsonPath.GetJsonElementProperty(element, "value"));
         Assert.Null(JsonPath.GetJsonElementProperty(element, "missing"));
         Assert.Null(JsonPath.GetJsonNodeProperty(JsonValue.Create(1), "x"));
+        Assert.Equal(9, JsonPath.GetJsonNodeProperty(node, "Value"));
         Assert.Equal(9, JsonPath.GetJsonNodeProperty(node, "VALUE"));
         Assert.Null(JsonPath.GetJsonNodeProperty(node, "missing"));
 
         Assert.Equal(1, JsonPath.GetDynamicArrayIndex(arrayDocument, 0));
         Assert.Equal(8, JsonPath.GetDynamicArrayIndex(arrayElement, 1));
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(() => JsonPath.GetDynamicArrayIndex(arrayElement, 9));
         Assert.Equal(6, JsonPath.GetDynamicArrayIndex(arrayNode.AsArray(), 1));
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(() => JsonPath.GetDynamicArrayIndex(arrayNode.AsArray(), 9));
         Assert.Equal(6, JsonPath.GetDynamicArrayIndex(arrayNode, 1));
         Assert.ThrowsAny<ArgumentOutOfRangeException>(() => JsonPath.GetDynamicArrayIndex(arrayNode, 3));
         Assert.ThrowsAny<NotSupportedException>(() => JsonPath.GetDynamicArrayIndex(element, 0));
@@ -180,5 +228,15 @@ public sealed class JsonPathSystemTextJsonTests
     private sealed class DocumentFilterHost
     {
         public JsonDocument Document { get; init; } = JsonDocument.Parse("[]");
+    }
+
+    private sealed class DocumentTerminalHost
+    {
+        public JsonDocument Document { get; init; } = JsonDocument.Parse("{}");
+    }
+
+    private sealed class NodeHost
+    {
+        public JsonObject Node { get; init; } = [];
     }
 }
