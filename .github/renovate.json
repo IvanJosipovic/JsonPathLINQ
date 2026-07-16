@@ -11,6 +11,8 @@
     "config:recommended"
   ],
   "platformAutomerge": true,
+  "prConcurrentLimit": 0,
+  "prHourlyLimit": 0,
   "ignorePaths": [
     "**/docs/**"
   ],
@@ -23,8 +25,7 @@
       ],
       "automerge": true,
       "matchFileNames": [
-        "tests/**",
-        "benchmarks/**"
+        "global.json"
       ]
     },
     {
@@ -33,11 +34,23 @@
         "patch",
         "digest"
       ],
-      "automerge": false,
+      "automerge": true,
       "semanticCommitType": "fix",
       "matchFileNames": [
-        "src/**",
-        "global.json"
+        "src/**"
+      ]
+    },
+    {
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "automerge": true,
+      "matchFileNames": [
+        ".github/workflows/**",
+        "tests/**",
+        "benchmarks/**"
       ]
     }
   ]
