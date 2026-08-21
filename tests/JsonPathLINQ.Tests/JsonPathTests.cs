@@ -230,6 +230,14 @@ public sealed class JsonPathTests
     }
 
     [Fact]
+    public void GenerateCanReadFieldThroughJsonPropertyName()
+    {
+        var expression = JsonPath.GetExpression<RenamedFieldHost>(".renamed");
+
+        Assert.Equal("field-value", expression.Compile()(new RenamedFieldHost { ActualName = "field-value" }));
+    }
+
+    [Fact]
     public void GenerateCanReadJsonExtensionData()
     {
         var expression = JsonPath.GetExpression<ExtensionDataHost>(".extra.value");
@@ -238,6 +246,22 @@ public sealed class JsonPathTests
         var result = expression.Compile()(source);
 
         Assert.Equal("from extension data", result);
+    }
+
+    [Fact]
+    public void GenerateCanReadFieldBackedJsonExtensionData()
+    {
+        var expression = JsonPath.GetExpression<FieldExtensionDataHost>(".extra.value");
+
+        var result = expression.Compile()(new FieldExtensionDataHost
+        {
+            ExtensionData = new Dictionary<string, object?>
+            {
+                ["extra"] = new Dictionary<string, object?> { ["value"] = "from field" },
+            },
+        });
+
+        Assert.Equal("from field", result);
     }
 
     [Fact]
@@ -575,7 +599,9 @@ public sealed class JsonPathTests
         Assert.Equal(1, JsonPath.CompareNormalizedValues(1, null));
         Assert.Equal(0, JsonPath.CompareNormalizedValues("1.5", 1.5m));
         Assert.True(JsonPath.CompareNormalizedValues(true, false) > 0);
+        Assert.True(JsonPath.CompareNormalizedValues(true, "false") < 0);
         Assert.True(JsonPath.CompareNormalizedValues("abc", "abd") < 0);
+        Assert.Equal(0, JsonPath.CompareNormalizedValues("same", "same"));
     }
 
     [Fact]
@@ -729,6 +755,71 @@ public sealed class JsonPathTests
     }
 
     [Fact]
+    public void EvaluateRuntimePathWildcardCoversAllRuntimeContainerShapes()
+    {
+        using var document = JsonDocument.Parse("{ \"a\": 1 }");
+        using var arrayDocument = JsonDocument.Parse("[1, 2]");
+        var element = document.RootElement.Clone();
+        var arrayElement = arrayDocument.RootElement.Clone();
+        var objectNode = JsonNode.Parse("{ \"a\": 1 }")!;
+        var arrayNode = JsonNode.Parse("[1, 2]")!;
+
+        JsonPath.EvaluateRuntimePath(new WildcardNode(), element).ShouldBe(1);
+        JsonPath.EvaluateRuntimePath(new WildcardNode(), arrayElement).ShouldBe(new object?[] { 1, 2 });
+        JsonPath.EvaluateRuntimePath(new WildcardNode(), objectNode).ShouldBe(1);
+        JsonPath.EvaluateRuntimePath(new WildcardNode(), arrayNode).ShouldBe(new object?[] { 1, 2 });
+        JsonPath.EvaluateRuntimePath(new WildcardNode(), JsonValue.Create(1)).ShouldBeNull();
+        JsonPath.EvaluateRuntimePath(new WildcardNode(), "text").ShouldBeNull();
+        JsonPath.EvaluateRuntimePath(new WildcardNode(), 1).ShouldBeNull();
+        JsonPath.EvaluateRuntimePath(new WildcardNode(), new[] { 1, 2 }).ShouldBe(new object?[] { 1, 2 });
+        JsonPath.EvaluateRuntimePath(new WildcardNode(), null).ShouldBeNull();
+    }
+
+    [Fact]
+    public void EvaluateRuntimePathRecursiveTraversesJsonDictionariesSequencesAndClrMembers()
+    {
+        using var document = JsonDocument.Parse("{ \"child\": { \"value\": 1 }, \"items\": [2] }");
+        var node = JsonNode.Parse("{ \"child\": { \"value\": 3 } }")!;
+        var source = new object[]
+        {
+            document,
+            node,
+            new Dictionary<string, object?> { ["value"] = 4 },
+            new[] { new SimpleHost { Name = "leaf", Count = 5 } },
+            "simple",
+            6,
+            null!
+        };
+
+        var valuePath = new ListNode();
+        valuePath.Append(new RecursiveNode());
+        valuePath.Append(new FieldNode("value"));
+        var values = (object?[])JsonPath.EvaluateRuntimePath(valuePath, source)!;
+        values.ShouldContain(1);
+        values.ShouldContain(3);
+        values.ShouldContain(4);
+
+        var namePath = new ListNode();
+        namePath.Append(new RecursiveNode());
+        namePath.Append(new FieldNode("Name"));
+        JsonPath.EvaluateRuntimePath(namePath, source).ShouldBe("leaf");
+    }
+
+    [Fact]
+    public void EvaluateRuntimePathHandlesCaseInsensitiveJsonAndGenericExtensionDataLookup()
+    {
+        var jsonObject = JsonNode.Parse("{ \"Name\": \"node\" }")!;
+        JsonPath.EvaluateRuntimePath(new FieldNode("name"), jsonObject).ShouldBe("node");
+
+        var source = new SortedDictionaryExtensionDataHost
+        {
+            ExtensionData = new SortedDictionary<string, object?> { ["extra"] = "value" }
+        };
+        JsonPath.EvaluateRuntimePath(new FieldNode("extra"), source).ShouldBe("value");
+        JsonPath.EvaluateRuntimePath(new FieldNode("missing"), source).ShouldBeNull();
+    }
+
+    [Fact]
     public void EvaluateRuntimePathSupportsJsonScalarNormalizationAndIdentifiers()
     {
         using var document = JsonDocument.Parse("5");
@@ -802,10 +893,22 @@ public sealed class JsonPathTests
         public string ActualName { get; init; } = string.Empty;
     }
 
+    private sealed class RenamedFieldHost
+    {
+        [JsonPropertyName("renamed")]
+        public string ActualName = string.Empty;
+    }
+
     private sealed class ExtensionDataHost
     {
         [JsonExtensionData]
         public Dictionary<string, object?> ExtensionData { get; init; } = [];
+    }
+
+    private sealed class FieldExtensionDataHost
+    {
+        [JsonExtensionData]
+        public Dictionary<string, object?> ExtensionData = [];
     }
 
     private sealed class JsonElementExtensionDataHost
