@@ -243,6 +243,30 @@ public sealed class JsonPathTests
     }
 
     [Fact]
+    public void GenerateCanReadJsonExtensionDataFromUntypedSource()
+    {
+        var expression = JsonPath.GetExpression<object>(".extra.value");
+
+        object source = JsonSerializer.Deserialize<ExtensionDataHost>("""{ "extra": { "value": "from untyped source" } }""")!;
+        var result = expression.Compile()(source);
+
+        Assert.Equal("from untyped source", result);
+    }
+
+    [Fact]
+    public void GenerateReturnsNullForMissingFieldInGenericOnlyExtensionData()
+    {
+        var expression = JsonPath.GetExpression<SortedDictionaryExtensionDataHost>(".missing");
+
+        var result = expression.Compile()(new SortedDictionaryExtensionDataHost
+        {
+            ExtensionData = new SortedDictionary<string, object?> { ["present"] = "value" },
+        });
+
+        Assert.Null(result);
+    }
+
+    [Fact]
     public void GenerateCanReadGenericDictionaryWithConvertedKey()
     {
         var expression = JsonPath.GetExpression<Dictionary<int, string>, string>("['42']");
@@ -779,6 +803,12 @@ public sealed class JsonPathTests
     {
         [JsonExtensionData]
         public Dictionary<string, JsonElement> ExtensionData { get; init; } = [];
+    }
+
+    private sealed class SortedDictionaryExtensionDataHost
+    {
+        [JsonExtensionData]
+        public SortedDictionary<string, object?> ExtensionData { get; init; } = [];
     }
 
     private sealed class NoMatchHost

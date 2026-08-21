@@ -791,13 +791,22 @@ public static class JsonPath
         if (dictionary is not null && TryGetGenericDictionary(dictionary.GetType(), out var dictionaryType))
         {
             var keyType = dictionaryType.GetGenericArguments()[0];
+            var valueType = dictionaryType.GetGenericArguments()[1];
             if (TryConvertStringKey(key, keyType, out var convertedKey))
             {
                 var indexer = dictionaryType.GetProperty("Item", [keyType]);
                 if (indexer?.GetMethod != null)
                 {
-                    value = indexer.GetValue(dictionary, [convertedKey]);
-                    return true;
+                    var tryGetValue = dictionaryType.GetMethod("TryGetValue", [keyType, valueType.MakeByRefType()]);
+                    if (tryGetValue != null)
+                    {
+                        var arguments = new object?[] { convertedKey, null };
+                        if (tryGetValue.Invoke(dictionary, arguments) is true)
+                        {
+                            value = arguments[1];
+                            return true;
+                        }
+                    }
                 }
             }
         }
