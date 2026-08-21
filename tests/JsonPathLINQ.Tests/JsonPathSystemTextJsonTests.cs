@@ -66,6 +66,18 @@ public sealed class JsonPathSystemTextJsonTests
     }
 
     [Fact]
+    public void GetExpressionClonesJsonObjectTerminalBeforeDocumentIsDisposed()
+    {
+        var expression = JsonPath.GetExpression<JsonElement>(".child");
+        using var document = JsonDocument.Parse("""{ "child": { "value": "detached" } }""");
+
+        var result = (JsonElement)expression.Compile()(document.RootElement);
+        document.Dispose();
+
+        result.GetProperty("value").GetString().ShouldBe("detached");
+    }
+
+    [Fact]
     public void GetExpressionSupportsJsonDocumentRootPaths()
     {
         var document = JsonDocument.Parse("""
