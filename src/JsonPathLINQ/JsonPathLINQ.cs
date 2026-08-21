@@ -32,6 +32,7 @@ public static class JsonPath
     private static readonly MethodInfo GetJsonElementPropertyMethod = GetMethod(nameof(GetJsonElementProperty));
     private static readonly MethodInfo GetJsonNodePropertyMethod = GetMethod(nameof(GetJsonNodeProperty));
     private static readonly MethodInfo GetLateBoundMemberMethod = GetMethod(nameof(GetLateBoundMember));
+    private static readonly MethodInfo GetExtensionDataValueMethod = GetMethod(nameof(GetExtensionDataValue));
     private static readonly MethodInfo GetDynamicArrayIndexMethod = GetMethod(nameof(GetDynamicArrayIndex));
     private static readonly MethodInfo EnumerateDynamicMethod = GetMethod(nameof(EnumerateDynamic));
     private static readonly MethodInfo CompareDynamicValuesMethod = GetMethod(nameof(CompareDynamicValues));
@@ -221,6 +222,14 @@ public static class JsonPath
         if (TryGenerateMemberAccess(source, node.Value, out var memberAccess))
         {
             return memberAccess;
+        }
+
+        if (source.Type != typeof(object) && TryGetExtensionDataMember(source.Type, out _))
+        {
+            return Expression.Call(
+                GetExtensionDataValueMethod,
+                Expression.Convert(source, typeof(object)),
+                Expression.Constant(node.Value));
         }
 
         if (source.Type == typeof(object))
@@ -734,7 +743,76 @@ public static class JsonPath
             }
         }
 
-        return null;
+        return GetExtensionDataValue(source, name);
+    }
+
+    internal static object? GetExtensionDataValue(object? source, string name)
+    {
+        if (source is null || !TryGetExtensionDataMember(source.GetType(), out var member))
+        {
+            return null;
+        }
+
+        var extensionData = member switch
+        {
+            PropertyInfo property when property.GetIndexParameters().Length == 0 => property.GetValue(source),
+            FieldInfo field => field.GetValue(source),
+            _ => null,
+        };
+
+        return TryGetDictionaryValue(extensionData, name, out var value) ? value : null;
+    }
+
+    private static bool TryGetExtensionDataMember(Type sourceType, out MemberInfo member)
+    {
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public;
+
+        member = sourceType.GetProperties(flags)
+            .Where(property => property.GetIndexParameters().Length == 0)
+            .FirstOrDefault(property => property.GetCustomAttribute<JsonExtensionDataAttribute>() != null)!;
+        if (member != null)
+        {
+            return true;
+        }
+
+        member = sourceType.GetFields(flags)
+            .FirstOrDefault(field => field.GetCustomAttribute<JsonExtensionDataAttribute>() != null)!;
+        return member != null;
+    }
+
+    private static bool TryGetDictionaryValue(object? dictionary, string key, out object? value)
+    {
+        if (dictionary is IDictionary nonGenericDictionary && nonGenericDictionary.Contains(key))
+        {
+            value = nonGenericDictionary[key];
+            return true;
+        }
+
+        if (dictionary is not null && TryGetGenericDictionary(dictionary.GetType(), out var dictionaryType))
+        {
+            var keyType = dictionaryType.GetGenericArguments()[0];
+            var valueType = dictionaryType.GetGenericArguments()[1];
+            if (TryConvertStringKey(key, keyType, out var convertedKey))
+            {
+                var indexer = dictionaryType.GetProperty("Item", [keyType]);
+                if (indexer?.GetMethod != null)
+                {
+                    var tryGetValue = dictionaryType.GetMethod("TryGetValue", [keyType, valueType.MakeByRefType()]);
+                    if (tryGetValue != null)
+                    {
+                        var arguments = new object?[] { convertedKey, null };
+                        if (tryGetValue.Invoke(dictionary, arguments) is true)
+                        {
+                            value = arguments[1];
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        value = null;
+        return false;
     }
 
     internal static object? GetJsonElementProperty(JsonElement source, string name)
@@ -1093,6 +1171,21 @@ public static class JsonPath
             if (string.Equals(jsonName, fieldName, StringComparison.OrdinalIgnoreCase))
             {
                 value = candidateProperty.GetValue(source);
+                return true;
+            }
+        }
+
+        if (TryGetExtensionDataMember(sourceType, out var extensionDataMember))
+        {
+            var extensionData = extensionDataMember switch
+            {
+                PropertyInfo extensionProperty when extensionProperty.GetIndexParameters().Length == 0 => extensionProperty.GetValue(source),
+                FieldInfo extensionField => extensionField.GetValue(source),
+                _ => null,
+            };
+
+            if (TryGetDictionaryValue(extensionData, fieldName, out value))
+            {
                 return true;
             }
         }
