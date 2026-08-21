@@ -221,6 +221,28 @@ public sealed class JsonPathTests
     }
 
     [Fact]
+    public void GenerateCanReadJsonExtensionData()
+    {
+        var expression = JsonPath.GetExpression<ExtensionDataHost>(".extra.value");
+
+        var source = JsonSerializer.Deserialize<ExtensionDataHost>("""{ "extra": { "value": "from extension data" } }""")!;
+        var result = expression.Compile()(source);
+
+        Assert.Equal("from extension data", result);
+    }
+
+    [Fact]
+    public void GenerateCanReadJsonElementExtensionData()
+    {
+        var expression = JsonPath.GetExpression<JsonElementExtensionDataHost>(".extra.value");
+
+        var source = JsonSerializer.Deserialize<JsonElementExtensionDataHost>("""{ "extra": { "value": "from JsonElement" } }""")!;
+        var result = expression.Compile()(source);
+
+        Assert.Equal("from JsonElement", result);
+    }
+
+    [Fact]
     public void GenerateCanReadGenericDictionaryWithConvertedKey()
     {
         var expression = JsonPath.GetExpression<Dictionary<int, string>, string>("['42']");
@@ -491,6 +513,10 @@ public sealed class JsonPathTests
         Assert.Equal("name", JsonPath.GetLateBoundMember(new SimpleHost { Name = "name" }, "Name"));
         Assert.Equal(11, JsonPath.GetLateBoundMember(new FieldHost { Count = 11 }, "Count"));
         Assert.Equal("renamed", JsonPath.GetLateBoundMember(new RenamedPropertyHost { ActualName = "renamed" }, "renamed"));
+        Assert.Equal("extension", JsonPath.GetLateBoundMember(new ExtensionDataHost
+        {
+            ExtensionData = new Dictionary<string, object?> { ["extra"] = "extension" },
+        }, "extra"));
         Assert.Null(JsonPath.GetLateBoundMember(new NoMatchHost(), "missing"));
 
         Assert.Null(JsonPath.GetDynamicArrayIndex(null, 0));
@@ -595,6 +621,10 @@ public sealed class JsonPathTests
         JsonPath.EvaluateRuntimePath(new FieldNode("Name"), dict).ShouldBe("dictionary");
 
         JsonPath.EvaluateRuntimePath(new FieldNode("renamed"), new RenamedPropertyHost { ActualName = "renamed-value" }).ShouldBe("renamed-value");
+        JsonPath.EvaluateRuntimePath(new FieldNode("extra"), new ExtensionDataHost
+        {
+            ExtensionData = new Dictionary<string, object?> { ["extra"] = "extension-value" },
+        }).ShouldBe("extension-value");
         JsonPath.EvaluateRuntimePath(new FieldNode("Count"), new FieldHost { Count = 9 }).ShouldBe(9);
         JsonPath.EvaluateRuntimePath(new FieldNode("missing"), new NoMatchHost()).ShouldBeNull();
         JsonPath.EvaluateRuntimePath(new FieldNode("missing"), null).ShouldBeNull();
@@ -737,6 +767,18 @@ public sealed class JsonPathTests
     {
         [JsonPropertyName("renamed")]
         public string ActualName { get; init; } = string.Empty;
+    }
+
+    private sealed class ExtensionDataHost
+    {
+        [JsonExtensionData]
+        public Dictionary<string, object?> ExtensionData { get; init; } = [];
+    }
+
+    private sealed class JsonElementExtensionDataHost
+    {
+        [JsonExtensionData]
+        public Dictionary<string, JsonElement> ExtensionData { get; init; } = [];
     }
 
     private sealed class NoMatchHost
