@@ -815,6 +815,14 @@ public static class JsonPath
             }
         }
 
+        foreach (var candidateField in sourceType.GetFields(BindingFlags.Instance | BindingFlags.Public))
+        {
+            if (string.Equals(candidateField.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return new RuntimeMemberLookup { Field = candidateField };
+            }
+        }
+
         return new RuntimeMemberLookup();
     }
 
@@ -1446,26 +1454,32 @@ public static class JsonPath
     private static List<object?> ApplyRuntimeRecursive(IEnumerable<object?> values)
     {
         var results = new List<object?>();
+        var visited = new HashSet<object>(ReferenceEqualityComparer.Instance);
 
         foreach (var value in values)
         {
             results.Add(value);
-            CollectRuntimeDescendants(value, results);
+            CollectRuntimeDescendants(value, results, visited);
         }
 
         return results;
     }
 
-    private static void CollectRuntimeDescendants(object? value, List<object?> values)
+    private static void CollectRuntimeDescendants(object? value, List<object?> values, HashSet<object> visited)
     {
         if (value is null)
         {
             return;
         }
 
+        if (!value.GetType().IsValueType && !visited.Add(value))
+        {
+            return;
+        }
+
         if (value is JsonDocument document)
         {
-            CollectRuntimeDescendants(document.RootElement, values);
+            CollectRuntimeDescendants(document.RootElement, values, visited);
             return;
         }
 
@@ -1477,7 +1491,7 @@ public static class JsonPath
                 {
                     var child = ConvertJsonElementValue(property.Value);
                     values.Add(child);
-                    CollectRuntimeDescendants(child, values);
+                    CollectRuntimeDescendants(property.Value, values, visited);
                 }
             }
             else if (element.ValueKind == JsonValueKind.Array)
@@ -1486,7 +1500,7 @@ public static class JsonPath
                 {
                     var child = ConvertJsonElementValue(item);
                     values.Add(child);
-                    CollectRuntimeDescendants(child, values);
+                    CollectRuntimeDescendants(item, values, visited);
                 }
             }
 
@@ -1499,7 +1513,7 @@ public static class JsonPath
             {
                 var child = ConvertJsonNodeValue(item);
                 values.Add(child);
-                CollectRuntimeDescendants(child, values);
+                CollectRuntimeDescendants(child, values, visited);
             }
 
             return;
@@ -1511,7 +1525,7 @@ public static class JsonPath
             {
                 var child = ConvertJsonNodeValue(property.Value);
                 values.Add(child);
-                CollectRuntimeDescendants(child, values);
+                CollectRuntimeDescendants(child, values, visited);
             }
 
             return;
@@ -1527,7 +1541,7 @@ public static class JsonPath
             foreach (DictionaryEntry entry in dictionary)
             {
                 values.Add(entry.Value);
-                CollectRuntimeDescendants(entry.Value, values);
+                CollectRuntimeDescendants(entry.Value, values, visited);
             }
 
             return;
@@ -1538,7 +1552,7 @@ public static class JsonPath
             foreach (var item in enumerable)
             {
                 values.Add(item);
-                CollectRuntimeDescendants(item, values);
+                CollectRuntimeDescendants(item, values, visited);
             }
 
             return;
@@ -1556,14 +1570,14 @@ public static class JsonPath
         {
             var child = property.GetValue(value);
             values.Add(child);
-            CollectRuntimeDescendants(child, values);
+            CollectRuntimeDescendants(child, values, visited);
         }
 
         foreach (var field in valueType.GetFields(BindingFlags.Instance | BindingFlags.Public).OrderBy(x => x.MetadataToken))
         {
             var child = field.GetValue(value);
             values.Add(child);
-            CollectRuntimeDescendants(child, values);
+            CollectRuntimeDescendants(child, values, visited);
         }
     }
 

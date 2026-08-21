@@ -680,6 +680,7 @@ public sealed class JsonPathTests
         JsonPath.EvaluateRuntimePath(new FieldNode("Name"), dict).ShouldBe("dictionary");
 
         JsonPath.EvaluateRuntimePath(new FieldNode("renamed"), new RenamedPropertyHost { ActualName = "renamed-value" }).ShouldBe("renamed-value");
+        JsonPath.EvaluateRuntimePath(new FieldNode("RENAMED"), new RenamedFieldHost { ActualName = "renamed-field-value" }).ShouldBe("renamed-field-value");
         JsonPath.EvaluateRuntimePath(new FieldNode("extra"), new ExtensionDataHost
         {
             ExtensionData = new Dictionary<string, object?> { ["extra"] = "extension-value" },
@@ -803,6 +804,24 @@ public sealed class JsonPathTests
         namePath.Append(new RecursiveNode());
         namePath.Append(new FieldNode("Name"));
         JsonPath.EvaluateRuntimePath(namePath, source).ShouldBe("leaf");
+    }
+
+    [Fact]
+    public void EvaluateRuntimePathRecursiveStopsAtRepeatedReferenceObjects()
+    {
+        var host = new CyclicHost { Name = "root" };
+        host.Child = host;
+        host.Items.Add(host);
+
+        var cyclicEnumerable = new List<object?>();
+        cyclicEnumerable.Add(cyclicEnumerable);
+
+        var namePath = new ListNode();
+        namePath.Append(new RecursiveNode());
+        namePath.Append(new FieldNode("Name"));
+
+        JsonPath.EvaluateRuntimePath(namePath, new object?[] { host, cyclicEnumerable })
+            .ShouldBe(new object?[] { "root", "root", "root" });
     }
 
     [Fact]
@@ -957,6 +976,15 @@ public sealed class JsonPathTests
     private sealed class RecursiveLeaf
     {
         public string Name { get; init; } = string.Empty;
+    }
+
+    private sealed class CyclicHost
+    {
+        public string Name { get; init; } = string.Empty;
+
+        public CyclicHost? Child { get; set; }
+
+        public List<object?> Items { get; } = [];
     }
 
     public sealed class ExpressionTestObject
