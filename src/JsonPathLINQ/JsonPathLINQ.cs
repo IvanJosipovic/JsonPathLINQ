@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -29,7 +30,7 @@ public static class JsonPath
             parameters.Length == 2 &&
             parameters[1].ParameterType == typeof(int));
 
-    private static readonly MethodInfo GetJsonElementPropertyMethod = GetMethod(nameof(GetJsonElementProperty));
+    private static readonly MethodInfo GetJsonElementPropertyMethod = GetMethod(nameof(GetJsonElementPropertyRaw));
     private static readonly MethodInfo GetJsonNodePropertyMethod = GetMethod(nameof(GetJsonNodeProperty));
     private static readonly MethodInfo GetLateBoundMemberMethod = GetMethod(nameof(GetLateBoundMember));
     private static readonly MethodInfo GetExtensionDataValueMethod = GetMethod(nameof(GetExtensionDataValue));
@@ -40,6 +41,32 @@ public static class JsonPath
     private static readonly MethodInfo GetJsonNodeValueOrSelfMethod = GetMethod(nameof(GetJsonNodeValueOrSelf));
     private static readonly MethodInfo GetJsonDocumentValueOrSelfMethod = GetMethod(nameof(GetJsonDocumentValueOrSelf));
     private static readonly MethodInfo EvaluateRuntimePathMethod = GetMethod(nameof(EvaluateRuntimePath));
+    private static readonly ConcurrentDictionary<RuntimeMemberKey, RuntimeMemberLookup> RuntimeMemberCache = [];
+    private static readonly ConcurrentDictionary<Type, ExtensionDataLookup> ExtensionDataCache = [];
+    private static readonly ConcurrentDictionary<Type, GenericDictionaryLookup> GenericDictionaryCache = [];
+
+    private readonly record struct RuntimeMemberKey(Type SourceType, string Name);
+
+    private sealed class RuntimeMemberLookup
+    {
+        public PropertyInfo? Property { get; init; }
+
+        public FieldInfo? Field { get; init; }
+    }
+
+    private sealed class ExtensionDataLookup
+    {
+        public MemberInfo? Member { get; init; }
+    }
+
+    private sealed class GenericDictionaryLookup
+    {
+        public Type? DictionaryType { get; init; }
+
+        public Type? KeyType { get; init; }
+
+        public MethodInfo? TryGetValue { get; init; }
+    }
 
     /// <summary>
     /// Returns a Expression representing the jsonPath
@@ -406,6 +433,25 @@ public static class JsonPath
             return true;
         }
 
+        foreach (var candidateProperty in source.Type.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+        {
+            if (candidateProperty.GetIndexParameters().Length == 0 &&
+                string.Equals(candidateProperty.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                expression = Expression.Property(source, candidateProperty);
+                return true;
+            }
+        }
+
+        foreach (var candidateField in source.Type.GetFields(BindingFlags.Instance | BindingFlags.Public))
+        {
+            if (string.Equals(candidateField.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                expression = Expression.Field(source, candidateField);
+                return true;
+            }
+        }
+
         expression = null!;
         return false;
     }
@@ -714,36 +760,62 @@ public static class JsonPath
             return dictionary.Contains(name) ? dictionary[name] : null;
         }
 
+        if (TryGetClrMemberValue(source, name, out var memberValue))
+        {
+            return memberValue;
+        }
+
+        return GetExtensionDataValue(source, name);
+    }
+
+    private static bool TryGetClrMemberValue(object source, string name, out object? value)
+    {
+        var lookup = RuntimeMemberCache.GetOrAdd(
+            new RuntimeMemberKey(source.GetType(), name),
+            static key => FindRuntimeMember(key.SourceType, key.Name));
+
+        if (lookup.Property != null)
+        {
+            value = lookup.Property.GetValue(source);
+            return true;
+        }
+
+        if (lookup.Field != null)
+        {
+            value = lookup.Field.GetValue(source);
+            return true;
+        }
+
+        value = null;
+        return false;
+    }
+
+    private static RuntimeMemberLookup FindRuntimeMember(Type sourceType, string name)
+    {
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase;
-        var sourceType = source.GetType();
 
         var property = sourceType.GetProperty(name, flags);
         if (property != null && property.GetIndexParameters().Length == 0)
         {
-            return property.GetValue(source);
+            return new RuntimeMemberLookup { Property = property };
         }
 
         var field = sourceType.GetField(name, flags);
         if (field != null)
         {
-            return field.GetValue(source);
+            return new RuntimeMemberLookup { Field = field };
         }
 
         foreach (var candidateProperty in sourceType.GetProperties(BindingFlags.Instance | BindingFlags.Public))
         {
-            if (candidateProperty.GetIndexParameters().Length != 0)
+            if (candidateProperty.GetIndexParameters().Length == 0 &&
+                string.Equals(candidateProperty.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name, name, StringComparison.OrdinalIgnoreCase))
             {
-                continue;
-            }
-
-            var jsonName = candidateProperty.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name;
-            if (string.Equals(jsonName, name, StringComparison.OrdinalIgnoreCase))
-            {
-                return candidateProperty.GetValue(source);
+                return new RuntimeMemberLookup { Property = candidateProperty };
             }
         }
 
-        return GetExtensionDataValue(source, name);
+        return new RuntimeMemberLookup();
     }
 
     internal static object? GetExtensionDataValue(object? source, string name)
@@ -765,19 +837,26 @@ public static class JsonPath
 
     private static bool TryGetExtensionDataMember(Type sourceType, out MemberInfo member)
     {
+        var lookup = ExtensionDataCache.GetOrAdd(sourceType, static type => FindExtensionDataMember(type));
+        member = lookup.Member!;
+        return lookup.Member != null;
+    }
+
+    private static ExtensionDataLookup FindExtensionDataMember(Type sourceType)
+    {
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public;
 
-        member = sourceType.GetProperties(flags)
-            .Where(property => property.GetIndexParameters().Length == 0)
-            .FirstOrDefault(property => property.GetCustomAttribute<JsonExtensionDataAttribute>() != null)!;
-        if (member != null)
+        var property = sourceType.GetProperties(flags)
+            .FirstOrDefault(candidate => candidate.GetIndexParameters().Length == 0 &&
+                                         candidate.GetCustomAttribute<JsonExtensionDataAttribute>() != null);
+        if (property != null)
         {
-            return true;
+            return new ExtensionDataLookup { Member = property };
         }
 
-        member = sourceType.GetFields(flags)
-            .FirstOrDefault(field => field.GetCustomAttribute<JsonExtensionDataAttribute>() != null)!;
-        return member != null;
+        var field = sourceType.GetFields(flags)
+            .FirstOrDefault(candidate => candidate.GetCustomAttribute<JsonExtensionDataAttribute>() != null);
+        return new ExtensionDataLookup { Member = field };
     }
 
     private static bool TryGetDictionaryValue(object? dictionary, string key, out object? value)
@@ -788,25 +867,19 @@ public static class JsonPath
             return true;
         }
 
-        if (dictionary is not null && TryGetGenericDictionary(dictionary.GetType(), out var dictionaryType))
+        if (dictionary is not null)
         {
-            var keyType = dictionaryType.GetGenericArguments()[0];
-            var valueType = dictionaryType.GetGenericArguments()[1];
-            if (TryConvertStringKey(key, keyType, out var convertedKey))
+            var lookup = GenericDictionaryCache.GetOrAdd(
+                dictionary.GetType(),
+                static type => FindGenericDictionaryLookup(type));
+            if (lookup.DictionaryType != null && lookup.KeyType != null && lookup.TryGetValue != null &&
+                TryConvertStringKey(key, lookup.KeyType, out var convertedKey))
             {
-                var indexer = dictionaryType.GetProperty("Item", [keyType]);
-                if (indexer?.GetMethod != null)
+                var arguments = new object?[] { convertedKey, null };
+                if (lookup.TryGetValue.Invoke(dictionary, arguments) is true)
                 {
-                    var tryGetValue = dictionaryType.GetMethod("TryGetValue", [keyType, valueType.MakeByRefType()]);
-                    if (tryGetValue != null)
-                    {
-                        var arguments = new object?[] { convertedKey, null };
-                        if (tryGetValue.Invoke(dictionary, arguments) is true)
-                        {
-                            value = arguments[1];
-                            return true;
-                        }
-                    }
+                    value = arguments[1];
+                    return true;
                 }
             }
         }
@@ -815,27 +888,50 @@ public static class JsonPath
         return false;
     }
 
+    private static GenericDictionaryLookup FindGenericDictionaryLookup(Type type)
+    {
+        if (!TryGetGenericDictionary(type, out var dictionaryType))
+        {
+            return new GenericDictionaryLookup();
+        }
+
+        var arguments = dictionaryType.GetGenericArguments();
+        var keyType = arguments[0];
+        var valueType = arguments[1];
+        return new GenericDictionaryLookup
+        {
+            DictionaryType = dictionaryType,
+            KeyType = keyType,
+            TryGetValue = dictionaryType.GetMethod("TryGetValue", [keyType, valueType.MakeByRefType()]),
+        };
+    }
+
     internal static object? GetJsonElementProperty(JsonElement source, string name)
+    {
+        return ConvertJsonElementValue(GetJsonElementPropertyRaw(source, name));
+    }
+
+    private static JsonElement GetJsonElementPropertyRaw(JsonElement source, string name)
     {
         if (source.ValueKind != JsonValueKind.Object)
         {
-            return null;
+            return default;
         }
 
         if (source.TryGetProperty(name, out var exactProperty))
         {
-            return ConvertJsonElementValue(exactProperty);
+            return exactProperty;
         }
 
         foreach (var property in source.EnumerateObject())
         {
-            if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+            if (property.NameEquals(name) || string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
             {
-                return ConvertJsonElementValue(property.Value);
+                return property.Value;
             }
         }
 
-        return null;
+        return default;
     }
 
     internal static object? GetJsonNodeProperty(JsonNode? source, string name)
@@ -1143,36 +1239,11 @@ public static class JsonPath
             return false;
         }
 
-        const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase;
         var sourceType = source.GetType();
 
-        var property = sourceType.GetProperty(fieldName, flags);
-        if (property != null && property.GetIndexParameters().Length == 0)
+        if (TryGetClrMemberValue(source, fieldName, out value))
         {
-            value = property.GetValue(source);
             return true;
-        }
-
-        var field = sourceType.GetField(fieldName, flags);
-        if (field != null)
-        {
-            value = field.GetValue(source);
-            return true;
-        }
-
-        foreach (var candidateProperty in sourceType.GetProperties(BindingFlags.Instance | BindingFlags.Public))
-        {
-            if (candidateProperty.GetIndexParameters().Length != 0)
-            {
-                continue;
-            }
-
-            var jsonName = candidateProperty.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name;
-            if (string.Equals(jsonName, fieldName, StringComparison.OrdinalIgnoreCase))
-            {
-                value = candidateProperty.GetValue(source);
-                return true;
-            }
         }
 
         if (TryGetExtensionDataMember(sourceType, out var extensionDataMember))
@@ -1366,7 +1437,7 @@ public static class JsonPath
 
         foreach (var value in values)
         {
-            results.AddRange(ExpandWildcardValues(value));
+            AppendRuntimeWildcardValues(value, results);
         }
 
         return results;
@@ -1387,8 +1458,110 @@ public static class JsonPath
 
     private static void CollectRuntimeDescendants(object? value, List<object?> values)
     {
-        foreach (var child in ExpandWildcardValues(value))
+        if (value is null)
         {
+            return;
+        }
+
+        if (value is JsonDocument document)
+        {
+            CollectRuntimeDescendants(document.RootElement, values);
+            return;
+        }
+
+        if (value is JsonElement element)
+        {
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var property in element.EnumerateObject())
+                {
+                    var child = ConvertJsonElementValue(property.Value);
+                    values.Add(child);
+                    CollectRuntimeDescendants(child, values);
+                }
+            }
+            else if (element.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in element.EnumerateArray())
+                {
+                    var child = ConvertJsonElementValue(item);
+                    values.Add(child);
+                    CollectRuntimeDescendants(child, values);
+                }
+            }
+
+            return;
+        }
+
+        if (value is JsonArray jsonArray)
+        {
+            foreach (var item in jsonArray)
+            {
+                var child = ConvertJsonNodeValue(item);
+                values.Add(child);
+                CollectRuntimeDescendants(child, values);
+            }
+
+            return;
+        }
+
+        if (value is JsonObject jsonObject)
+        {
+            foreach (var property in jsonObject)
+            {
+                var child = ConvertJsonNodeValue(property.Value);
+                values.Add(child);
+                CollectRuntimeDescendants(child, values);
+            }
+
+            return;
+        }
+
+        if (value is JsonNode || value is string)
+        {
+            return;
+        }
+
+        if (value is IDictionary dictionary)
+        {
+            foreach (DictionaryEntry entry in dictionary)
+            {
+                values.Add(entry.Value);
+                CollectRuntimeDescendants(entry.Value, values);
+            }
+
+            return;
+        }
+
+        if (value is IEnumerable enumerable)
+        {
+            foreach (var item in enumerable)
+            {
+                values.Add(item);
+                CollectRuntimeDescendants(item, values);
+            }
+
+            return;
+        }
+
+        var valueType = value.GetType();
+        if (IsSimpleRuntimeType(valueType))
+        {
+            return;
+        }
+
+        foreach (var property in valueType.GetProperties(BindingFlags.Instance | BindingFlags.Public)
+                     .Where(x => x.GetIndexParameters().Length == 0)
+                     .OrderBy(x => x.MetadataToken))
+        {
+            var child = property.GetValue(value);
+            values.Add(child);
+            CollectRuntimeDescendants(child, values);
+        }
+
+        foreach (var field in valueType.GetFields(BindingFlags.Instance | BindingFlags.Public).OrderBy(x => x.MetadataToken))
+        {
+            var child = field.GetValue(value);
             values.Add(child);
             CollectRuntimeDescendants(child, values);
         }
@@ -1414,21 +1587,17 @@ public static class JsonPath
         };
     }
 
-    private static IEnumerable<object?> ExpandWildcardValues(object? value)
+    private static void AppendRuntimeWildcardValues(object? value, List<object?> results)
     {
         if (value is null)
         {
-            yield break;
+            return;
         }
 
         if (value is JsonDocument document)
         {
-            foreach (var item in ExpandWildcardValues(document.RootElement))
-            {
-                yield return item;
-            }
-
-            yield break;
+            AppendRuntimeWildcardValues(document.RootElement, results);
+            return;
         }
 
         if (value is JsonElement element)
@@ -1437,81 +1606,81 @@ public static class JsonPath
             {
                 foreach (var property in element.EnumerateObject())
                 {
-                    yield return ConvertJsonElementValue(property.Value);
+                    results.Add(ConvertJsonElementValue(property.Value));
                 }
             }
             else if (element.ValueKind == JsonValueKind.Array)
             {
                 foreach (var item in element.EnumerateArray())
                 {
-                    yield return ConvertJsonElementValue(item);
+                    results.Add(ConvertJsonElementValue(item));
                 }
             }
 
-            yield break;
+            return;
         }
 
         if (value is JsonArray jsonArray)
         {
             foreach (var item in jsonArray)
             {
-                yield return ConvertJsonNodeValue(item);
+                results.Add(ConvertJsonNodeValue(item));
             }
 
-            yield break;
+            return;
         }
 
         if (value is JsonObject jsonObject)
         {
             foreach (var property in jsonObject)
             {
-                yield return ConvertJsonNodeValue(property.Value);
+                results.Add(ConvertJsonNodeValue(property.Value));
             }
 
-            yield break;
+            return;
         }
 
         if (value is JsonNode)
         {
-            yield break;
+            return;
         }
 
         if (value is IDictionary dictionary)
         {
             foreach (DictionaryEntry entry in dictionary)
             {
-                yield return entry.Value;
+                results.Add(entry.Value);
             }
 
-            yield break;
+            return;
         }
 
         if (value is IEnumerable enumerable and not string)
         {
             foreach (var item in enumerable)
             {
-                yield return item;
+                results.Add(item);
             }
 
-            yield break;
+            return;
         }
 
         var valueType = value.GetType();
         if (IsSimpleRuntimeType(valueType))
         {
-            yield break;
+            return;
         }
 
         foreach (var property in valueType.GetProperties(BindingFlags.Instance | BindingFlags.Public)
                      .Where(x => x.GetIndexParameters().Length == 0)
                      .OrderBy(x => x.MetadataToken))
         {
-            yield return property.GetValue(value);
+            results.Add(property.GetValue(value));
         }
 
         foreach (var field in valueType.GetFields(BindingFlags.Instance | BindingFlags.Public).OrderBy(x => x.MetadataToken))
         {
-            yield return field.GetValue(value);
+            results.Add(field.GetValue(value));
         }
     }
 

@@ -14,4 +14,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/JsonPathLINQ.Tests/JsonPathLINQ.Tests.csproj" />
   </Folder>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/JsonPathLINQ.Benchmarks/JsonPathLINQ.Benchmarks.csproj" />
+  </Folder>
 </Solution>

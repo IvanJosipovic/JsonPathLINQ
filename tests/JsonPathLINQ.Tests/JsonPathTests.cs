@@ -221,6 +221,15 @@ public sealed class JsonPathTests
     }
 
     [Fact]
+    public void GenerateCanReadTypedMemberThroughJsonPropertyName()
+    {
+        var expression = JsonPath.GetExpression<RenamedPropertyHost>(".renamed");
+        var result = expression.Compile()(new RenamedPropertyHost { ActualName = "typed-value" });
+
+        Assert.Equal("typed-value", result);
+    }
+
+    [Fact]
     public void GenerateCanReadJsonExtensionData()
     {
         var expression = JsonPath.GetExpression<ExtensionDataHost>(".extra.value");
